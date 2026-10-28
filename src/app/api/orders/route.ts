@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+
+// GET /api/orders — petani: pesanan utk produk miliknya; admin desa: semua pesanan.
+export async function GET(req: NextRequest) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Silakan masuk terlebih dahulu" }, { status: 401 });
+  }
+  if (session.role === "operator") {
+    return NextResponse.json({ error: "Operator tidak dapat melihat pesanan" }, { status: 403 });
+  }
+
+  try {
+    const where =
+      session.role === "superadmin"
+        ? {}
+        : { product: { ownerId: session.id } };
+    const orders = await db.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    return NextResponse.json(orders);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Gagal memuat pesanan" }, { status: 500 });
+  }
+}
 
 // POST /api/orders — buat pesanan dari Pasar Tani
 export async function POST(req: NextRequest) {

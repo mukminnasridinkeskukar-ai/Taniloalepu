@@ -8,6 +8,7 @@ import {
   MapPinned, Tractor, Leaf, Store, ArrowRight, Users, Globe2, Star, ShoppingCart, ShieldCheck,
 } from "lucide-react";
 import { HERO_IMAGES } from "@/lib/agri-content";
+import type { AuthUser } from "@/lib/agri-types";
 import type { ViewKey } from "./header";
 
 const FEATURES: {
@@ -60,7 +61,7 @@ const TESTIMONI = [
   },
 ];
 
-export function HomeView({ onNavigate }: { onNavigate: (v: ViewKey) => void }) {
+export function HomeView({ onNavigate, user }: { onNavigate: (v: ViewKey) => void; user: AuthUser | null }) {
   return (
     <div>
       {/* ===== HERO ===== */}
@@ -96,10 +97,17 @@ export function HomeView({ onNavigate }: { onNavigate: (v: ViewKey) => void }) {
               mudah diikuti di HP mana saja.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button size="lg" onClick={() => onNavigate("lahan")} className="gap-2 bg-emerald-500 text-white hover:bg-emerald-400">
-                Mulai Kelola Lahan
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Button>
+              {user ? (
+                <Button size="lg" onClick={() => onNavigate("panel")} className="gap-2 bg-emerald-500 text-white hover:bg-emerald-400">
+                  Buka Panel {user.role === "operator" ? "Operator" : user.role === "superadmin" ? "Admin" : "Petani"}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : (
+                <Button size="lg" onClick={() => onNavigate("daftar")} className="gap-2 bg-emerald-500 text-white hover:bg-emerald-400">
+                  Daftar Sebagai Petani
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              )}
               <Button
                 size="lg"
                 variant="outline"

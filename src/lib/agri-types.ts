@@ -1,4 +1,57 @@
 // Tipe data bersama platform Tani Loa Lepu
+export type Role = "petani" | "operator" | "superadmin";
+
+export type AuthUser = {
+  id: string;
+  username: string;
+  name: string;
+  role: string; // petani | operator | superadmin
+  status: string;
+  phone: string;
+  address: string;
+  avatarUrl: string;
+};
+
+export type AccountRecord = {
+  id: string;
+  username: string;
+  password: string;
+  name: string;
+  role: string;
+  status: string;
+  phone: string;
+  address: string;
+  avatarUrl: string;
+  createdAt: string;
+  approvedAt: string | null;
+  _count?: { lands: number; products: number };
+};
+
+export type OrderRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  quantity: number;
+  total: number;
+  status: string;
+  createdAt: string;
+};
+
+export const ROLE_LABEL: Record<string, string> = {
+  petani: "Petani",
+  operator: "Operator",
+  superadmin: "Admin Desa",
+};
+
+export const STATUS_LABEL: Record<string, string> = {
+  menunggu: "Menunggu Persetujuan",
+  aktif: "Aktif",
+  ditolak: "Ditolak",
+};
+
 export type Activity = {
   id: string;
   landId: string;

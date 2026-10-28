@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
-// GET /api/lands — daftar semua lahan + aktivitas
-export async function GET() {
+// GET /api/lands — petani: lahan milik sendiri; operator & admin desa: semua lahan.
+// Tanpa sesi: tidak mengembalikan data (data lahan hanya untuk pengguna terdaftar).
+export async function GET(req: NextRequest) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Silakan masuk untuk melihat kelola lahan" }, { status: 401 });
+  }
+
   try {
+    const where = session.role === "petani" ? { ownerId: session.id } : {};
     const lands = await db.land.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       include: { activities: { orderBy: { date: "desc" }, take: 20 } },
     });
@@ -15,8 +24,16 @@ export async function GET() {
   }
 }
 
-// POST /api/lands — tambah lahan baru
+// POST /api/lands — tambah lahan baru (wajib masuk; petani atau admin desa)
 export async function POST(req: NextRequest) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Silakan masuk terlebih dahulu untuk mendaftarkan lahan" }, { status: 401 });
+  }
+  if (session.role === "operator") {
+    return NextResponse.json({ error: "Operator tidak dapat menginput data lahan" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const name = String(body.name ?? "").trim();
@@ -30,6 +47,7 @@ export async function POST(req: NextRequest) {
     }
     const land = await db.land.create({
       data: {
+        ownerId: session.id,
         name,
         location,
         area,

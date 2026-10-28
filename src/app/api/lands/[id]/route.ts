@@ -1,16 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 const ALLOWED_STATUS = ["persiapan", "tanam", "perawatan", "panen", "pasca"];
 
 // PATCH /api/lands/[id] — update status / langkah selesai / catatan
+// Pemilik lahan (petani) atau admin desa boleh mengubah; operator hanya melihat.
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Silakan masuk terlebih dahulu untuk mengelola lahan" }, { status: 401 });
+  }
+  if (session.role === "operator") {
+    return NextResponse.json({ error: "Operator hanya dapat melihat data lahan" }, { status: 403 });
+  }
+
   try {
     const { id } = await ctx.params;
     const body = await req.json();
     const existing = await db.land.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Lahan tidak ditemukan" }, { status: 404 });
+    }
+    if (session.role !== "superadmin" && existing.ownerId !== session.id) {
+      return NextResponse.json({ error: "Anda hanya dapat mengelola lahan milik sendiri" }, { status: 403 });
     }
 
     const data: Record<string, unknown> = {};
@@ -57,10 +70,25 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 }
 
-// DELETE /api/lands/[id] — hapus lahan
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+// DELETE /api/lands/[id] — hapus lahan (pemilik atau admin desa)
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Silakan masuk terlebih dahulu" }, { status: 401 });
+  }
+  if (session.role === "operator") {
+    return NextResponse.json({ error: "Operator tidak dapat menghapus lahan" }, { status: 403 });
+  }
+
   try {
     const { id } = await ctx.params;
+    const existing = await db.land.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Lahan tidak ditemukan" }, { status: 404 });
+    }
+    if (session.role !== "superadmin" && existing.ownerId !== session.id) {
+      return NextResponse.json({ error: "Anda hanya dapat menghapus lahan milik sendiri" }, { status: 403 });
+    }
     await db.land.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {

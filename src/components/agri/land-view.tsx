@@ -24,10 +24,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, MapPin, Ruler, Leaf, NotebookPen, Loader2, Trash2, ChevronDown, ClipboardCheck, History, X,
+  Lock, LogIn, UserPlus,
 } from "lucide-react";
-import type { Land, Activity } from "@/lib/agri-types";
+import type { Land, Activity, AuthUser } from "@/lib/agri-types";
 import { LAND_STATUS, SOIL_TYPES, parseJsonArr } from "@/lib/agri-types";
 import { LAND_PRESET_IMAGES } from "@/lib/agri-content";
+import type { ViewKey } from "./header";
 
 const PREP_CHECKLIST: { id: string; label: string }[] = [
   { id: "lahan", label: "Survei & analisis lahan selesai" },
@@ -43,10 +45,19 @@ const EMPTY_FORM = {
   status: "persiapan", plannedCrop: "", notes: "", imageUrl: LAND_PRESET_IMAGES[0],
 };
 
-export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
+export function LandView({
+  onGoPrepare,
+  user,
+  onNavigate,
+}: {
+  onGoPrepare: () => void;
+  user: AuthUser | null;
+  onNavigate: (v: ViewKey) => void;
+}) {
   const { toast } = useToast();
   const [lands, setLands] = useState<Land[]>([]);
   const [loading, setLoading] = useState(true);
+  const [needAuth, setNeedAuth] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
@@ -55,11 +66,23 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
   const [deleteTarget, setDeleteTarget] = useState<Land | null>(null);
   const [actForm, setActForm] = useState({ title: "", note: "" });
   const [notesDraft, setNotesDraft] = useState("");
+  const canEdit = !!user && user.role !== "operator";
 
   const fetchLands = useCallback(async () => {
+    if (!user) {
+      setNeedAuth(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/lands");
+      if (res.status === 401 || res.status === 403) {
+        setNeedAuth(true);
+        setLands([]);
+        return;
+      }
+      setNeedAuth(false);
       const data = await res.json();
       setLands(Array.isArray(data) ? data : []);
     } catch {
@@ -67,7 +90,7 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
     void fetchLands();
@@ -175,14 +198,54 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
             Semua riwayat tersimpan rapi agar mudah dievaluasi saat musim panen.
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Daftarkan Lahan
-        </Button>
+        {user && user.role !== "operator" ? (
+          <Button onClick={() => setAddOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Daftarkan Lahan
+          </Button>
+        ) : null}
       </div>
 
+      {/* Perlu masuk */}
+      {needAuth ? (
+        <Card className="mt-10 overflow-hidden pt-0">
+          <div className="relative h-40 sm:h-52">
+            <img
+              src={LAND_PRESET_IMAGES[1] || LAND_PRESET_IMAGES[0]}
+              alt="Sawah hijau Desa Loa Lepu"
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/20" />
+            <div className="absolute inset-0 flex items-center justify-center px-4">
+              <div className="text-center text-white">
+                <Lock className="mx-auto mb-2 h-8 w-8" aria-hidden="true" />
+                <h2 className="text-xl font-bold sm:text-2xl">Masuk untuk Mengelola Lahan</h2>
+                <p className="mx-auto mt-1 max-w-md text-sm text-white/85">
+                  Data lahan bersifat pribadi. Masuk dengan akun petani Anda untuk mendaftarkan lahan,
+                  mencatat aktivitas, dan memantau progres tanam.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-3 p-6 text-center">
+            <p className="max-w-lg text-sm text-muted-foreground">
+              Belum punya akun? Daftar terlebih dahulu — pengajuan akan disetujui operator desa, lalu Anda
+              dapat langsung menginput data lahan.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => onNavigate("masuk")} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                <LogIn className="h-4 w-4" aria-hidden="true" /> Masuk
+              </Button>
+              <Button variant="outline" onClick={() => onNavigate("daftar")} className="gap-2">
+                <UserPlus className="h-4 w-4" aria-hidden="true" /> Daftar Akun Baru
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Ringkasan */}
-      {!loading && lands.length > 0 && (
+      {!needAuth && !loading && lands.length > 0 && (
         <div className="mt-8 grid grid-cols-3 gap-3 sm:gap-4">
           {[
             { label: "Total lahan", value: String(lands.length) },
@@ -198,7 +261,7 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
       )}
 
       {/* Daftar lahan */}
-      {loading ? (
+      {needAuth ? null : loading ? (
         <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" /> Memuat lahan…
         </div>
@@ -212,9 +275,13 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
             Mulai dengan mendaftarkan petakan lahan pertama Anda. Setelah terdaftar, Anda bisa
             mengikuti checklist persiapan dan mencatat aktivitas tanam.
           </p>
-          <Button onClick={() => setAddOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" aria-hidden="true" /> Daftarkan Lahan Pertama
-          </Button>
+          {user && user.role !== "operator" ? (
+            <Button onClick={() => setAddOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" aria-hidden="true" /> Daftarkan Lahan Pertama
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">Lahan yang terdaftar petani lain akan tampil di sini saat admin membukanya.</p>
+          )}
         </Card>
       ) : (
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -266,32 +333,36 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
                     <Button size="sm" variant="secondary" className="flex-1" onClick={() => openDetail(land)}>
                       Detail & Kelola
                     </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" aria-label="Ubah status lahan">
-                          Status <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                    {user && user.role !== "operator" ? (
+                      <>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" aria-label="Ubah status lahan">
+                              Status <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {Object.entries(LAND_STATUS).map(([k, v]) => (
+                              <DropdownMenuItem
+                                key={k}
+                                onClick={() => updateLand(land.id, { status: k }, `Status diubah ke "${v.label}"`)}
+                              >
+                                {v.label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleteTarget(land)}
+                          aria-label={`Hapus ${land.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {Object.entries(LAND_STATUS).map(([k, v]) => (
-                          <DropdownMenuItem
-                            key={k}
-                            onClick={() => updateLand(land.id, { status: k }, `Status diubah ke "${v.label}"`)}
-                          >
-                            {v.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleteTarget(land)}
-                      aria-label={`Hapus ${land.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      </>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -508,16 +579,19 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
                     <Textarea
                       rows={2}
                       className="mt-2"
-                      placeholder="Tulis catatan: kondisi cuaca, jadwal pupuk, dll."
+                      placeholder={canEdit ? "Tulis catatan: kondisi cuaca, jadwal pupuk, dll." : "Hanya pemilik lahan yang dapat mengubah catatan."}
                       value={notesDraft}
                       onChange={(e) => setNotesDraft(e.target.value)}
+                      disabled={!canEdit}
                     />
-                    <Button
-                      size="sm" variant="secondary" className="mt-2"
-                      onClick={() => updateLand(detail.id, { notes: notesDraft }, "Catatan disimpan")}
-                    >
-                      Simpan Catatan
-                    </Button>
+                    {canEdit ? (
+                      <Button
+                        size="sm" variant="secondary" className="mt-2"
+                        onClick={() => updateLand(detail.id, { notes: notesDraft }, "Catatan disimpan")}
+                      >
+                        Simpan Catatan
+                      </Button>
+                    ) : null}
                   </div>
 
                   {/* Aktivitas */}
@@ -526,22 +600,26 @@ export function LandView({ onGoPrepare }: { onGoPrepare: () => void }) {
                       <History className="h-4 w-4 text-primary" aria-hidden="true" />
                       Riwayat Aktivitas
                     </h3>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    {canEdit ? (
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          placeholder="cth: Siram pagi, aplikasi pupuk urea"
+                          value={actForm.title}
+                          onChange={(e) => setActForm({ ...actForm, title: e.target.value })}
+                          aria-label="Judul aktivitas"
+                        />
+                        <Button onClick={addActivity} disabled={!actForm.title.trim()} className="shrink-0">Catat</Button>
+                      </div>
+                    ) : null}
+                    {canEdit ? (
                       <Input
-                        placeholder="cth: Siram pagi, aplikasi pupuk urea"
-                        value={actForm.title}
-                        onChange={(e) => setActForm({ ...actForm, title: e.target.value })}
-                        aria-label="Judul aktivitas"
+                        className="mt-2"
+                        placeholder="Catatan tambahan (opsional)"
+                        value={actForm.note}
+                        onChange={(e) => setActForm({ ...actForm, note: e.target.value })}
+                        aria-label="Catatan aktivitas"
                       />
-                      <Button onClick={addActivity} disabled={!actForm.title.trim()} className="shrink-0">Catat</Button>
-                    </div>
-                    <Input
-                      className="mt-2"
-                      placeholder="Catatan tambahan (opsional)"
-                      value={actForm.note}
-                      onChange={(e) => setActForm({ ...actForm, note: e.target.value })}
-                      aria-label="Catatan aktivitas"
-                    />
+                    ) : null}
                     <div className="nice-scroll mt-4 max-h-56 space-y-2.5 overflow-y-auto pr-1">
                       {activities.length === 0 ? (
                         <p className="rounded-xl bg-muted/50 p-4 text-center text-sm text-muted-foreground">

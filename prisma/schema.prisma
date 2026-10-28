@@ -7,9 +7,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ===== PENGGUNA (petani | operator | superadmin) =====
+model User {
+  id         String    @id @default(cuid())
+  username   String    @unique
+  password   String // dikelola platform; dapat dilihat operator utk bantu pemulihan akun
+  name       String
+  role       String    @default("petani") // petani | operator | superadmin
+  status     String    @default("menunggu") // menunggu | aktif | ditolak
+  phone      String    @default("")
+  address    String    @default("")
+  avatarUrl  String    @default("")
+  lands      Land[]
+  products   Product[]
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+}
+
 // ===== LAHAN (Kelola Lahan) =====
 model Land {
   id             String     @id @default(cuid())
+  ownerId        String?
+  owner          User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   name           String
   location       String
   area           Float
@@ -58,6 +77,8 @@ model Crop {
 // ===== PRODUK (Pasar Tani) =====
 model Product {
   id          String   @id @default(cuid())
+  ownerId     String?
+  owner       User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   name        String
   category    String // sayuran | buah | beras-palawija | olahan | protein
   price       Float

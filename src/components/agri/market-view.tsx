@@ -21,20 +21,21 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Loader2, ShoppingCart, Star, MapPin, Plus, Minus, Trash2, Store,
-  PackageCheck, Truck, Leaf, X, Sprout,
+  PackageCheck, Truck, Leaf, X, Sprout, LogIn,
 } from "lucide-react";
-import type { Product } from "@/lib/agri-types";
+import type { Product, AuthUser } from "@/lib/agri-types";
 import { PRODUCT_CATEGORIES, rupiah, parseJsonArr } from "@/lib/agri-types";
 import { HERO_IMAGES, PRODUCT_PRESET_IMAGES } from "@/lib/agri-content";
+import type { ViewKey } from "./header";
 
 type CartItem = { productId: string; name: string; price: number; unit: string; qty: number; imageUrl: string; stock: number };
 
 const EMPTY_SELL = {
   name: "", category: "sayuran", price: "", unit: "kg", stock: "", description: "",
-  farmerName: "", location: "", imageUrl: PRODUCT_PRESET_IMAGES[0], isOrganic: false,
+  location: "Desa Loa Lepu", imageUrl: PRODUCT_PRESET_IMAGES[0], isOrganic: false,
 };
 
-export function MarketView() {
+export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavigate: (v: ViewKey) => void }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,8 +132,13 @@ export function MarketView() {
   }
 
   async function sellProduct() {
-    if (!sellForm.name.trim() || !sellForm.price || !sellForm.farmerName.trim() || !sellForm.location.trim()) {
-      toast({ title: "Lengkapi nama produk, harga, nama petani, dan lokasi", variant: "destructive" });
+    if (!user) {
+      toast({ title: "Silakan masuk terlebih dahulu", description: "Hanya petani terdaftar yang dapat memasang produk." });
+      onNavigate("masuk");
+      return;
+    }
+    if (!sellForm.name.trim() || !sellForm.price || !sellForm.location.trim()) {
+      toast({ title: "Lengkapi nama produk, harga, dan lokasi", variant: "destructive" });
       return;
     }
     setSelling(true);
@@ -178,9 +184,15 @@ export function MarketView() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={() => setSellOpen(true)} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
-              <Store className="mr-2 h-4 w-4" aria-hidden="true" /> Jual Hasil Panen
-            </Button>
+            {user && user.role !== "operator" ? (
+              <Button variant="outline" onClick={() => setSellOpen(true)} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+                <Store className="mr-2 h-4 w-4" aria-hidden="true" /> Jual Hasil Panen
+              </Button>
+            ) : !user ? (
+              <Button variant="outline" onClick={() => onNavigate("masuk")} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+                <LogIn className="mr-2 h-4 w-4" aria-hidden="true" /> Masuk untuk Jual
+              </Button>
+            ) : null}
             <Sheet open={cartOpen} onOpenChange={setCartOpen}>
               <SheetTrigger asChild>
                 <Button className="relative bg-emerald-500 text-white hover:bg-emerald-400">
@@ -552,17 +564,13 @@ export function MarketView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="sp-farmer">Nama petani / kelompok *</Label>
-                <Input id="sp-farmer" placeholder="cth: Bpk. Sutrisno" value={sellForm.farmerName}
-                  onChange={(e) => setSellForm({ ...sellForm, farmerName: e.target.value })} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="sp-loc">Lokasi *</Label>
-                <Input id="sp-loc" placeholder="cth: Desa Loa Lepu, Tenggarong Seberang" value={sellForm.location}
-                  onChange={(e) => setSellForm({ ...sellForm, location: e.target.value })} />
-              </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sp-loc">Lokasi *</Label>
+              <Input id="sp-loc" placeholder="cth: Desa Loa Lepu, Tenggarong Seberang" value={sellForm.location}
+                onChange={(e) => setSellForm({ ...sellForm, location: e.target.value })} />
+              <p className="text-xs text-muted-foreground">
+                Produk tercatat atas nama akun Anda: <span className="font-medium text-foreground">{user?.name}</span>
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="sp-desc">Deskripsi produk</Label>

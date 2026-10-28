@@ -1,9 +1,16 @@
 -- ================================================================
--- TaniNusa — Data Awal (Seed) untuk Supabase
+-- Tani Loa Lepu — Data Awal (Seed)
 -- Jalankan SETELAH supabase/schema.sql
 -- ================================================================
 
-truncate public.activities, public.lands, public.crops, public.products, public.orders;
+truncate public.activities, public.lands, public.crops, public.products, public.orders, public.accounts;
+
+-- ===== AKUN DEMO (multi-user) =====
+insert into public.accounts (username, password, name, role, status, phone, address, approved_at) values
+  ('superadmin', 'super123',    'Admin Desa Loa Lepu',   'superadmin', 'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
+  ('operator',   'operator123', 'Operator Desa Loa Lepu','operator',   'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
+  ('petani01',   'petani123',   'Bpk. Sutrisno',         'petani',     'aktif',   '0812-3456-7890','Dusun Loa Lepu Ulu',                 now()),
+  ('petani02',   'petani456',   'Ibu Mariati',           'petani',     'menunggu','0853-9876-5432','Dusun Loa Lepu Ilir',                null);
 
 -- ===== TANAMAN =====
 insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
@@ -78,6 +85,10 @@ insert into public.lands (name, location, area, area_unit, soil_type, status, pl
 values ('Ladang Persiapan Baru', 'Desa Loa Duri Ilir, Tenggarong Seberang', 1500, 'm2', 'kapur (litosol)', 'persiapan', 'Jagung Manis', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg', 'Menunggu traktor untuk bajak perdana, jadwal tanam awal bulan depan.', '["lahan"]');
 
 insert into public.activities (land_id, title, note)
-select id, 'Lahan didaftarkan ke platform', 'Lahan siap dikelola bersama TaniNusa.' from public.lands;
+select id, 'Lahan didaftarkan ke platform', 'Lahan siap dikelola bersama Tani Loa Lepu.' from public.lands;
 
 select 'Seed selesai! crops=' || count(*) from public.crops;
+
+-- ===== KEPEMILIKAN DATA DEMO =====
+update public.lands    set owner_id = (select id from public.accounts where username = 'petani01');
+update public.products set owner_id = (select id from public.accounts where username = 'petani01');

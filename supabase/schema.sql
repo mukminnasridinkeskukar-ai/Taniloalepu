@@ -1,12 +1,32 @@
 -- ================================================================
--- TaniNusa — Skema Supabase (PostgreSQL)
--- Jalankan file ini di Supabase Dashboard → SQL Editor → New query.
--- Lalu jalankan supabase/seed.sql untuk mengisi data awal.
+-- Tani Loa Lepu — Skema Basis Data Produksi (PostgreSQL)
+-- Jalankan file ini di panel layanan basis data Anda → SQL Editor.
+-- Lalu jalankan seed.sql untuk mengisi data awal.
 -- ================================================================
+
+-- ===== PENGGUNA (petani | operator | superadmin) =====
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  username text unique not null,
+  password text not null, -- dikelola platform; operator dapat melihat utk bantu pemulihan akun
+  name text not null,
+  role text not null default 'petani'
+    check (role in ('petani','operator','superadmin')),
+  status text not null default 'menunggu'
+    check (status in ('menunggu','aktif','ditolak')),
+  phone text default '',
+  address text default '',
+  avatar_url text default '',
+  created_at timestamptz not null default now(),
+  approved_at timestamptz
+);
+
+create index if not exists idx_accounts_status on public.accounts(status, created_at desc);
 
 -- ===== LAHAN (Kelola Lahan) =====
 create table if not exists public.lands (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid references public.accounts(id) on delete set null,
   name text not null,
   location text not null,
   area numeric not null check (area > 0),
@@ -57,6 +77,7 @@ create table if not exists public.crops (
 -- ===== PRODUK (Pasar Tani) =====
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid references public.accounts(id) on delete set null,
   name text not null,
   category text not null default 'sayuran',
   price numeric not null check (price > 0),
@@ -90,31 +111,27 @@ create table if not exists public.orders (
 
 -- ================================================================
 -- Row Level Security (RLS)
--- Mode publik terbuka (tanpa login): siapa pun boleh membaca katalog
--- dan membuat lahan/pesanan; cocok untuk demo & komunitas kecil.
--- Untuk produksi ketat, aktifkan Supabase Auth lalu kunci kebijakan
--- tulis dengan auth.role() = 'authenticated'.
+-- Aplikasi berkomunikasi lewat koneksi server (service role), sehingga
+-- aturan peran (petani/operator/superadmin) ditegakkan di kode aplikasi.
+-- Kebijakan di bawah menjaga akses langsung dari klien tetap aman:
+-- katalog & produk terbaca publik; data akun & lahan hanya lewat server.
 -- ================================================================
+alter table public.accounts   enable row level security;
 alter table public.lands      enable row level security;
 alter table public.activities enable row level security;
 alter table public.crops      enable row level security;
 alter table public.products   enable row level security;
 alter table public.orders     enable row level security;
 
--- Baca terbuka untuk semua
-create policy "lands_read"    on public.lands      for select using (true);
-create policy "activities_read" on public.activities for select using (true);
+-- Katalog tanaman & produk: baca terbuka untuk semua
 create policy "crops_read"    on public.crops      for select using (true);
 create policy "products_read" on public.products   for select using (true);
-create policy "orders_read"   on public.orders     for select using (true);
 
--- Tulis terbuka (demo publik)
-create policy "lands_insert"    on public.lands      for insert with check (true);
-create policy "lands_update"    on public.lands      for update using (true);
-create policy "lands_delete"    on public.lands      for delete using (true);
-create policy "activities_insert" on public.activities for insert with check (true);
-create policy "products_insert" on public.products   for insert with check (true);
-create policy "orders_insert"   on public.orders     for insert with check (true);
+-- Pesanan: publik boleh membuat (checkout), baca hanya lewat server
+create policy "orders_insert" on public.orders     for insert with check (true);
+
+-- Akun, lahan, aktivitas: seluruh akses dikelola koneksi server
+-- (tanpa kebijakan klien = tidak dapat diakses langsung dari browser)
 
 -- Update otomatis kolom updated_at
 create or replace function public.touch_updated_at()
