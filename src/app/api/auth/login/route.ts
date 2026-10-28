@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { store } from "@/lib/store";
-import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { createSessionToken, SESSION_COOKIE, sessionCookieOptions, publicUser } from "@/lib/auth";
 
 // POST /api/auth/login — masuk dengan nama pengguna & kata sandi
 export async function POST(req: NextRequest) {
@@ -42,16 +42,7 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({
       ok: true,
       token: createSessionToken(user.id),
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        phone: user.phone,
-        address: user.address,
-        avatarUrl: user.avatarUrl,
-      },
+      user: publicUser(user),
     });
     res.cookies.set(SESSION_COOKIE, createSessionToken(user.id), sessionCookieOptions(req));
     return res;

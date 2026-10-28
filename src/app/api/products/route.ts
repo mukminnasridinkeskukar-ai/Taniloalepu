@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { store } from "@/lib/store";
+import { store, composeFullAddress } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // POST /api/products — petani memasang hasil panen untuk dijual (wajib masuk)
@@ -45,11 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(product, { status: 201 });
   } catch (err) {
     console.error(err);
+    if ((err as { name?: string }).name === "DbError") {
+      const e = err as Error & { hint?: string; status?: number };
+      return NextResponse.json({ error: `${e.message} ${e.hint ?? ""}`.trim() }, { status: e.status && e.status >= 400 ? e.status : 500 });
+    }
     return NextResponse.json({ error: "Gagal memasang produk" }, { status: 500 });
   }
 }
 
-// GET /api/products?q=&category=&sort= — katalog Pasar Tani
+// GET /api/products?q=&category=&sort= — katalog Pasar Tani (+ info alamat & GPS penjual)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -58,7 +62,22 @@ export async function GET(req: NextRequest) {
     const sort = searchParams.get("sort") ?? "populer";
 
     const products = await store.products.list({ q, category, sort });
-    return NextResponse.json(products);
+
+    // Perkaya dengan alamat lengkap & koordinat GPS petani penjual
+    const ownerIds = [...new Set(products.map((p) => p.ownerId).filter(Boolean))] as string[];
+    const owners = await store.users.byIds(ownerIds);
+    const byId = new Map(owners.map((o) => [o.id, o]));
+    const enriched = products.map((p) => {
+      const owner = p.ownerId ? byId.get(p.ownerId) : undefined;
+      return {
+        ...p,
+        sellerAddress: composeFullAddress(owner ?? null),
+        sellerPhone: owner?.phone ?? "",
+        sellerLat: owner?.latitude ?? null,
+        sellerLng: owner?.longitude ?? null,
+      };
+    });
+    return NextResponse.json(enriched);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Gagal memuat produk" }, { status: 500 });

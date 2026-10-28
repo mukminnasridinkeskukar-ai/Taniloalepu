@@ -13,6 +13,34 @@ Antarmuka kaya gambar dan sepenuhnya responsif untuk HP, tablet, maupun desktop.
 
 ---
 
+## Fitur Penjual (Petani) di Pasar Tani
+
+### 1. Kelola produk sendiri
+- Tombol **Ubah** dan **Hapus** muncul otomatis pada kartu produk milik sendiri
+  (superadmin dapat mengelola semua produk; petani lain tidak bisa).
+- Ubah nama, harga, stok, satuan, kategori, lokasi, foto, dan deskripsi kapan saja —
+  perubahan langsung tampil di katalog.
+- Menghapus produk **tidak menghapus riwayat pesanan** yang sudah masuk.
+
+### 2. Metode pembayaran: Tunai (COD) & Transfer Bank
+- Saat checkout, pembeli memilih **Tunai (COD)** atau **Transfer Bank**.
+- Jika transfer: platform menampilkan **rekening bank petani penjual** (diatur petani
+  di halaman Akun Saya → *Rekening Bank Penerima Pembayaran*), pembeli lalu
+  **mengunggah foto bukti transfer** (otomatis dikompresi) dan bukti terlampir ke pesanan.
+- Petani melihat bukti di **Panel Petani → Pesanan** (tombol *Lihat Bukti Transfer*) lalu
+  menekan **Verifikasi Pembayaran** / **Tandai Lunas**. Rekening penjual ikut tersalin
+  ke setiap pesanan (snapshot), sehingga perubahan rekening tidak merusak riwayat.
+
+### 3. Alamat lengkap & koordinat GPS petani
+- Di halaman **Akun Saya** petani melengkapi: alamat lengkap (jalan/dusun/RT-RW),
+  desa, kecamatan, kabupaten, provinsi, serta **titik GPS** — cukup lewat tombol
+  *Ambil Lokasi GPS Saat Ini* (izinkan akses lokasi di peramban) atau isi manual;
+  pratinjau peta langsung tampil.
+- Alamat + koordinat tampil pada detail produk di Pasar Tani, lengkap dengan tautan
+  *Buka peta* dan *Hubungi petani via WhatsApp*.
+
+---
+
 ## Sistem Multi-Pengguna
 
 Platform memiliki tiga peran pengguna dengan hak akses berbeda:
@@ -106,6 +134,10 @@ supabase/
 
 1. Buka panel proyek basis data Anda (Supabase) → menu **SQL Editor** → **New query**.
 2. Salin **seluruh isi** berkas `supabase/setup.sql`, tempel, lalu klik **Run**.
+> **Penting:** setiap kali platform diperbarui (termasuk pembaruan ini), jalankan ulang
+> `setup.sql` terbaru. Skrip ini *idempoten* — aman dijalankan berulang, data lama Anda
+> tidak berubah; kolom-kolom baru (alamat & GPS, rekening bank, metode & bukti
+> pembayaran) akan ditambahkan otomatis.
 3. Selesai. Hasilnya: 6 tabel + kebijakan akses + data awal (4 akun demo,
    8 tanaman, 12 produk, 3 lahan contoh). Skrip ini aman dijalankan ulang —
    data yang sudah ada tidak akan ditimpa.

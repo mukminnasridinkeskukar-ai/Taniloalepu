@@ -47,7 +47,42 @@ export type SessionUser = {
   phone: string;
   address: string;
   avatarUrl: string;
+  addressFull: string;
+  village: string;
+  district: string;
+  regency: string;
+  province: string;
+  latitude: number | null;
+  longitude: number | null;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
 };
+
+/** Bentuk data pengguna yang aman dikirim ke klien (tanpa kata sandi). */
+export function publicUser(u: import("@/lib/store").UserRecord | null) {
+  if (!u) return null;
+  return {
+    id: u.id,
+    username: u.username,
+    name: u.name,
+    role: u.role,
+    status: u.status,
+    phone: u.phone,
+    address: u.address,
+    avatarUrl: u.avatarUrl,
+    addressFull: u.addressFull ?? "",
+    village: u.village ?? "",
+    district: u.district ?? "",
+    regency: u.regency ?? "",
+    province: u.province ?? "",
+    latitude: u.latitude ?? null,
+    longitude: u.longitude ?? null,
+    bankName: u.bankName ?? "",
+    bankAccountNumber: u.bankAccountNumber ?? "",
+    bankAccountName: u.bankAccountName ?? "",
+  };
+}
 
 /** Ambil token sesi dari cookie ATAU header Authorization (cadangan bila cookie diblokir iframe). */
 function extractSessionToken(req: Request): string | null {
@@ -81,6 +116,16 @@ export async function getSessionUser(req: Request): Promise<SessionUser | null> 
     phone: user.phone,
     address: user.address,
     avatarUrl: user.avatarUrl,
+    addressFull: user.addressFull ?? "",
+    village: user.village ?? "",
+    district: user.district ?? "",
+    regency: user.regency ?? "",
+    province: user.province ?? "",
+    latitude: user.latitude ?? null,
+    longitude: user.longitude ?? null,
+    bankName: user.bankName ?? "",
+    bankAccountNumber: user.bankAccountNumber ?? "",
+    bankAccountName: user.bankAccountName ?? "",
   };
 }
 

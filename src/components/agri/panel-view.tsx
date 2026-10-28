@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Map, Package, ShoppingBasket, PlusCircle, BookOpen, ArrowRight, Wallet, Loader2,
+  Landmark, Banknote, Eye, BadgeCheck, Hourglass,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser, Land, OrderRecord, Product } from "@/lib/agri-types";
+import { PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/agri-types";
 import { OperatorPanel } from "@/components/agri/operator-panel";
 import { SuperadminPanel } from "@/components/agri/admin-panel";
 
@@ -41,19 +46,26 @@ function PetaniPanel({ user, onNavigate }: { user: AuthUser; onNavigate: (v: "la
   const [lands, setLands] = useState<Land[] | null>(null);
   const [orders, setOrders] = useState<OrderRecord[] | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [proofOrder, setProofOrder] = useState<OrderRecord | null>(null);
+
+  const fetchOrders = useCallback(async () => {
+    const rO = await fetch("/api/orders");
+    const dO = await rO.json();
+    setOrders(Array.isArray(dO) ? dO : []);
+  }, []);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [rL, rO, rP] = await Promise.all([fetch("/api/lands"), fetch("/api/orders"), fetch("/api/products")]);
+        const [rL, rP] = await Promise.all([fetch("/api/lands"), fetch("/api/products")]);
         const dL = await rL.json();
-        const dO = await rO.json();
         const dP = await rP.json();
         if (!alive) return;
         setLands(Array.isArray(dL) ? dL : []);
-        setOrders(Array.isArray(dO) ? dO : []);
         setProducts(Array.isArray(dP) ? dP.filter((p: Product) => p.ownerId === user.id) : []);
+        await fetchOrders();
       } catch {
         if (alive) toast({ title: "Gagal memuat data panel", variant: "destructive" });
       }
@@ -61,11 +73,34 @@ function PetaniPanel({ user, onNavigate }: { user: AuthUser; onNavigate: (v: "la
     return () => {
       alive = false;
     };
-  }, [user.id, toast]);
+  }, [user.id, toast, fetchOrders]);
+
+  async function verifyPayment(o: OrderRecord) {
+    setBusyId(o.id);
+    try {
+      const res = await fetch(`/api/orders/${o.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: "terverifikasi" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({
+        title: "Pembayaran diverifikasi",
+        description: `Pesanan ${o.productName} (${o.customerName}) ditandai lunas.`,
+      });
+      await fetchOrders();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal memverifikasi", variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   const loading = lands === null || orders === null || products === null;
   const income = (orders ?? []).reduce((a, o) => a + o.total, 0);
   const planting = (lands ?? []).filter((l) => l.status === "tanam" || l.status === "perawatan").length;
+  const pendingPayments = (orders ?? []).filter((o) => o.paymentStatus !== "terverifikasi").length;
 
   const actions: { key: "lahan" | "pasar" | "tanaman"; icon: React.ReactNode; title: string; desc: string }[] = [
     { key: "lahan", icon: <Map className="h-5 w-5" aria-hidden="true" />, title: "Kelola Lahan", desc: "Daftarkan & pantau lahan Anda" },
@@ -98,7 +133,7 @@ function PetaniPanel({ user, onNavigate }: { user: AuthUser; onNavigate: (v: "la
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard icon={<Map className="h-5 w-5" aria-hidden="true" />} label="Lahan Saya" value={String(lands!.length)} hint={`${planting} sedang ditanami`} />
           <StatCard icon={<Package className="h-5 w-5" aria-hidden="true" />} label="Produk Saya" value={String(products!.length)} hint="dipasang di Pasar Tani" />
-          <StatCard icon={<ShoppingBasket className="h-5 w-5" aria-hidden="true" />} label="Pesanan Masuk" value={String(orders!.length)} hint="utk produk Anda" />
+          <StatCard icon={<ShoppingBasket className="h-5 w-5" aria-hidden="true" />} label="Pesanan Masuk" value={String(orders!.length)} hint={pendingPayments > 0 ? `${pendingPayments} belum terverifikasi` : "semua terverifikasi"} />
           <StatCard icon={<Wallet className="h-5 w-5" aria-hidden="true" />} label="Total Nilai Pesanan" value={rupiah(income)} hint="seluruh pesanan" />
         </div>
       )}
@@ -125,7 +160,7 @@ function PetaniPanel({ user, onNavigate }: { user: AuthUser; onNavigate: (v: "la
       </div>
 
       {/* Pesanan terbaru */}
-      <h2 className="mb-3 mt-8 text-lg font-bold">Pesanan Terbaru untuk Produk Anda</h2>
+      <h2 className="mb-3 mt-8 text-lg font-bold">Pesanan untuk Produk Anda</h2>
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
@@ -138,22 +173,99 @@ function PetaniPanel({ user, onNavigate }: { user: AuthUser; onNavigate: (v: "la
             </p>
           ) : (
             <ul className="divide-y divide-border/60">
-              {orders!.slice(0, 5).map((o) => (
-                <li key={o.id} className="flex flex-wrap items-center gap-2 p-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{o.productName}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {o.customerName} · {o.quantity} unit · {new Date(o.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
-                    </p>
-                  </div>
-                  <span className="font-semibold text-primary">{rupiah(o.total)}</span>
-                  <Badge variant="secondary">{o.status}</Badge>
-                </li>
-              ))}
+              {orders!.slice(0, 10).map((o) => {
+                const verified = o.paymentStatus === "terverifikasi";
+                const isTransfer = o.paymentMethod === "transfer";
+                return (
+                  <li key={o.id} className="p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{o.productName}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {o.customerName} · {o.quantity} unit · {new Date(o.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · {o.phone}
+                        </p>
+                      </div>
+                      <span className="font-semibold text-primary">{rupiah(o.total)}</span>
+                      <Badge variant="secondary">{o.status}</Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={verified ? "border-emerald-300 bg-emerald-50 text-emerald-800" : isTransfer ? "border-amber-300 bg-amber-50 text-amber-800" : "border-border bg-muted/50 text-muted-foreground"}
+                      >
+                        {isTransfer ? <Landmark className="mr-1 h-3 w-3" aria-hidden="true" /> : <Banknote className="mr-1 h-3 w-3" aria-hidden="true" />}
+                        {PAYMENT_METHOD_LABEL[o.paymentMethod ?? "cod"] ?? o.paymentMethod}
+                        {" · "}
+                        {verified ? PAYMENT_STATUS_LABEL.terverifikasi : isTransfer ? PAYMENT_STATUS_LABEL.menunggu : "Bayar di tempat"}
+                      </Badge>
+                      {isTransfer && o.paymentProof && (
+                        <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setProofOrder(o)}>
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" /> Lihat Bukti Transfer
+                        </Button>
+                      )}
+                      {!verified && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1 border-emerald-300 px-2 text-xs text-emerald-800 hover:bg-emerald-50"
+                          disabled={busyId === o.id}
+                          onClick={() => void verifyPayment(o)}
+                        >
+                          {busyId === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />}
+                          {isTransfer ? "Verifikasi Pembayaran" : "Tandai Lunas"}
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog bukti transfer */}
+      <Dialog open={!!proofOrder} onOpenChange={(v) => !v && setProofOrder(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Landmark className="h-5 w-5 text-primary" aria-hidden="true" />
+              Bukti Transfer — {proofOrder?.productName}
+            </DialogTitle>
+            <DialogDescription>
+              Dari {proofOrder?.customerName} · {rupiah(proofOrder?.total ?? 0)} · {proofOrder?.bankName} {proofOrder?.bankAccountNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {proofOrder?.paymentProof ? (
+            <img src={proofOrder.paymentProof} alt={`Bukti transfer dari ${proofOrder.customerName}`} className="w-full rounded-xl border" />
+          ) : (
+            <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Hourglass className="h-4 w-4" aria-hidden="true" /> Pembeli belum mengunggah bukti transfer.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            {proofOrder && proofOrder.paymentStatus !== "terverifikasi" && (
+              <Button
+                className="gap-2"
+                disabled={busyId === proofOrder.id}
+                onClick={() => {
+                  const target = proofOrder;
+                  setProofOrder(null);
+                  void verifyPayment(target);
+                }}
+              >
+                {busyId === proofOrder.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BadgeCheck className="h-4 w-4" aria-hidden="true" />}
+                Verifikasi Pembayaran
+              </Button>
+            )}
+            {proofOrder && proofOrder.paymentStatus === "terverifikasi" && (
+              <Badge className="gap-1 bg-emerald-600 text-white">
+                <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> Terverifikasi
+              </Badge>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

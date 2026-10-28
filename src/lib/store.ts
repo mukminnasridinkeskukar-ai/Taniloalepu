@@ -15,6 +15,10 @@ const USER_MAP: Record<string, string> = {
   avatarUrl: "avatar_url",
   createdAt: "created_at",
   approvedAt: "approved_at",
+  addressFull: "address_full",
+  bankName: "bank_name",
+  bankAccountNumber: "bank_account_number",
+  bankAccountName: "bank_account_name",
 };
 const LAND_MAP: Record<string, string> = {
   ownerId: "owner_id",
@@ -51,6 +55,14 @@ const ORDER_MAP: Record<string, string> = {
   productName: "product_name",
   customerName: "customer_name",
   createdAt: "created_at",
+  ownerId: "owner_id",
+  paymentMethod: "payment_method",
+  paymentStatus: "payment_status",
+  paymentProof: "payment_proof",
+  bankName: "bank_name",
+  bankAccountNumber: "bank_account_number",
+  bankAccountName: "bank_account_name",
+  confirmedAt: "confirmed_at",
 };
 
 function toRow(obj: Row, map: Record<string, string>): Row {
@@ -85,6 +97,16 @@ export type UserRecord = {
   phone: string;
   address: string;
   avatarUrl: string;
+  addressFull: string;
+  village: string;
+  district: string;
+  regency: string;
+  province: string;
+  latitude: number | null;
+  longitude: number | null;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
   createdAt: string;
   approvedAt: string | null;
 };
@@ -150,7 +172,8 @@ export type ProductRecord = {
 };
 export type OrderRecord = {
   id: string;
-  productId: string;
+  productId: string | null;
+  ownerId: string | null;
   productName: string;
   customerName: string;
   phone: string;
@@ -158,8 +181,24 @@ export type OrderRecord = {
   quantity: number;
   total: number;
   status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  paymentProof: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
+  confirmedAt: string | null;
   createdAt: string;
 };
+
+/** Alamat lengkap siap tampil dari data akun petani. */
+export function composeFullAddress(u: Partial<UserRecord> | null): string {
+  if (!u) return "";
+  return [u.addressFull || u.address, u.village, u.district, u.regency, u.province]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
 
 // ===== Operasi per tabel =====
 export const store = {
@@ -181,6 +220,14 @@ export const store = {
         limit: 1,
       });
       return rows[0] ? fromRow<UserRecord>(rows[0] as Row, USER_MAP) : null;
+    },
+    async byIds(ids: string[]): Promise<UserRecord[]> {
+      if (ids.length === 0) return [];
+      const rows = await rest.select("accounts", {
+        filters: { id: `in.(${ids.join(",")})` },
+        limit: 500,
+      });
+      return rows.map((r) => fromRow<UserRecord>(r as Row, USER_MAP));
     },
     async create(data: Partial<UserRecord> & Pick<UserRecord, "username" | "password" | "name">): Promise<UserRecord> {
       const [row] = await rest.insert("accounts", toRow(data as Row, USER_MAP));
@@ -300,6 +347,13 @@ export const store = {
       const [row] = await rest.insert("products", toRow(data as Row, PRODUCT_MAP));
       return fromRow<ProductRecord>(row as Row, PRODUCT_MAP);
     },
+    async update(id: string, patch: Partial<ProductRecord>): Promise<ProductRecord | null> {
+      const rows = await rest.update("products", { id: `eq.${id}` }, toRow(patch as Row, PRODUCT_MAP));
+      return rows[0] ? fromRow<ProductRecord>(rows[0] as Row, PRODUCT_MAP) : null;
+    },
+    async remove(id: string): Promise<void> {
+      await rest.remove("products", { id: `eq.${id}` });
+    },
     /** Ubah stok/terjual dengan penjaga konkurensi sederhana (stok lama harus cocok). */
     async adjustStock(id: string, oldStock: number, patch: { stock: number; sold: number }): Promise<boolean> {
       const rows = await rest.update(
@@ -312,30 +366,70 @@ export const store = {
   },
 
   orders: {
-    async list(filter?: { productIds?: string[] }): Promise<OrderRecord[]> {
+    /**
+     * Daftar pesanan untuk penjual: bila ownerId & productIds sama-sama diberi,
+     * hasil kedua kueri digabung unik (relasi owner ATAU produk milik penjual).
+     */
+    async list(filter?: { productIds?: string[]; ownerId?: string }): Promise<OrderRecord[]> {
+      const mapRows = (rows: Row[]) => rows.map((r) => fromRow<OrderRecord>(r, ORDER_MAP));
+
+      if (filter?.ownerId && filter?.productIds) {
+        if (filter.productIds.length === 0) {
+          const rows = await rest.select("orders", {
+            filters: { owner_id: `eq.${filter.ownerId}` },
+            order: "created_at.desc",
+            limit: 200,
+          });
+          return mapRows(rows);
+        }
+        const [byOwner, byProduct] = await Promise.all([
+          rest.select("orders", {
+            filters: { owner_id: `eq.${filter.ownerId}` },
+            order: "created_at.desc",
+            limit: 200,
+          }),
+          rest.select("orders", {
+            filters: { product_id: `in.(${filter.productIds.join(",")})` },
+            order: "created_at.desc",
+            limit: 200,
+          }),
+        ]);
+        const seen = new Set<string>();
+        const merged: OrderRecord[] = [];
+        for (const r of [...byOwner, ...byProduct]) {
+          const o = fromRow<OrderRecord>(r as Row, ORDER_MAP);
+          if (seen.has(o.id)) continue;
+          seen.add(o.id);
+          merged.push(o);
+        }
+        merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        return merged;
+      }
+
       const filters: Record<string, string> = {};
       if (filter?.productIds) {
         if (filter.productIds.length === 0) return [];
         filters.product_id = `in.(${filter.productIds.join(",")})`;
       }
+      if (filter?.ownerId) filters.owner_id = `eq.${filter.ownerId}`;
       const rows = await rest.select("orders", {
         filters,
         order: "created_at.desc",
-        limit: 100,
+        limit: 200,
       });
-      return rows.map((r) => fromRow<OrderRecord>(r as Row, ORDER_MAP));
+      return mapRows(rows);
     },
-    async create(data: {
-      productId: string;
-      productName: string;
-      customerName: string;
-      phone: string;
-      address: string;
-      quantity: number;
-      total: number;
-    }): Promise<OrderRecord> {
+    async byId(id: string): Promise<OrderRecord | null> {
+      const rows = await rest.select("orders", { filters: { id: `eq.${id}` }, limit: 1 });
+      return rows[0] ? fromRow<OrderRecord>(rows[0] as Row, ORDER_MAP) : null;
+    },
+    async create(data: Partial<OrderRecord> & Pick<OrderRecord, "productName" | "customerName" | "phone" | "address" | "quantity" | "total">): Promise<OrderRecord> {
       const [row] = await rest.insert("orders", toRow(data as Row, ORDER_MAP));
       return fromRow<OrderRecord>(row as Row, ORDER_MAP);
+    },
+    async update(id: string, patch: Partial<OrderRecord>): Promise<OrderRecord | null> {
+      const rows = await rest.update("orders", { id: `eq.${id}` }, toRow(patch as Row, ORDER_MAP));
+      return rows[0] ? fromRow<OrderRecord>(rows[0] as Row, ORDER_MAP) : null;
     },
   },
 };

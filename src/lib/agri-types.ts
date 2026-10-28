@@ -10,6 +10,16 @@ export type AuthUser = {
   phone: string;
   address: string;
   avatarUrl: string;
+  addressFull?: string;
+  village?: string;
+  district?: string;
+  regency?: string;
+  province?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
 };
 
 export type AccountRecord = {
@@ -29,7 +39,8 @@ export type AccountRecord = {
 
 export type OrderRecord = {
   id: string;
-  productId: string;
+  productId: string | null;
+  ownerId?: string | null;
   productName: string;
   customerName: string;
   phone: string;
@@ -37,6 +48,13 @@ export type OrderRecord = {
   quantity: number;
   total: number;
   status: string;
+  paymentMethod?: string; // cod | transfer
+  paymentStatus?: string; // menunggu | terverifikasi
+  paymentProof?: string; // data URL bukti transfer
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
+  confirmedAt?: string | null;
   createdAt: string;
 };
 
@@ -45,6 +63,65 @@ export const ROLE_LABEL: Record<string, string> = {
   operator: "Operator",
   superadmin: "Admin Desa",
 };
+
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cod: "Tunai (COD)",
+  transfer: "Transfer Bank",
+};
+
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  menunggu: "Menunggu Verifikasi",
+  terverifikasi: "Pembayaran Terverifikasi",
+};
+
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  baru: "Baru",
+  diproses: "Diproses",
+  dikirim: "Dikirim",
+  selesai: "Selesai",
+};
+
+export const BANK_OPTIONS = [
+  "BRI",
+  "BCA",
+  "Mandiri",
+  "BNI",
+  "BSI",
+  "BTN",
+  "Bank Kaltimtara",
+  "CIMB Niaga",
+  "Danamon",
+  "Permata",
+  "Bank Jateng",
+  "Bank Kalbar",
+];
+
+/** Gabungkan bagian alamat akun menjadi satu baris lengkap. */
+export function composeAddress(u: Partial<AuthUser> | null): string {
+  if (!u) return "";
+  return [u.addressFull || u.address, u.village, u.district, u.regency, u.province]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** Nomor telepon Indonesia → tautan WhatsApp (08xx → 628xx). */
+export function waLink(phone: string, text?: string): string {
+  const digits = (phone || "").replace(/\D/g, "").replace(/^0/, "62");
+  const q = text ? `?text=${encodeURIComponent(text)}` : "";
+  return digits ? `https://wa.me/${digits}${q}` : "";
+}
+
+/** Tautan peta (Google Maps) dari koordinat GPS. */
+export function mapsLink(lat?: number | null, lng?: number | null): string {
+  if (lat == null || lng == null) return "";
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+/** Koordinat format tampil singkat, cth: -0.40283, 117.08841 */
+export function fmtCoord(v?: number | null): string {
+  return v == null ? "-" : v.toFixed(5);
+}
 
 export const STATUS_LABEL: Record<string, string> = {
   menunggu: "Menunggu Persetujuan",
@@ -113,6 +190,15 @@ export type Product = {
   rating: number;
   sold: number;
   isOrganic: boolean;
+  ownerId?: string | null;
+  // info penjual (dari akun petani, diisi server)
+  sellerAddress?: string;
+  sellerPhone?: string;
+  sellerLat?: number | null;
+  sellerLng?: number | null;
+  sellerBankName?: string;
+  sellerBankAccountNumber?: string;
+  sellerBankAccountName?: string;
 };
 
 export const LAND_STATUS: Record<string, { label: string; color: string }> = {

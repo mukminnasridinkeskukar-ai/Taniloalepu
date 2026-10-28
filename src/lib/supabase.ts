@@ -47,6 +47,13 @@ function saranDariRespons(status: number, code: string, message: string): { pesa
         "Buka panel layanan basis data → SQL Editor → jalankan seluruh isi berkas supabase/setup.sql (sekali saja), lalu muat ulang halaman ini.",
     };
   }
+  if (code === "PGRST204" || /could not find the .* column/i.test(message)) {
+    return {
+      pesan: "Struktur basis data Anda belum memuat kolom terbaru platform.",
+      saran:
+        "Buka panel layanan basis data → SQL Editor → jalankan ulang seluruh isi berkas supabase/setup.sql terbaru (aman, data lama tidak berubah), lalu coba lagi.",
+    };
+  }
   if (status === 401 || status === 403 || /invalid api key|JWT/i.test(message)) {
     return {
       pesan: "Kunci akses basis data tidak valid atau kedaluwarsa.",

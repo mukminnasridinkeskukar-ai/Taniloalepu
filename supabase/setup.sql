@@ -24,11 +24,33 @@ create table if not exists public.accounts (
   phone text default '',
   address text default '',
   avatar_url text default '',
+  address_full text default '',
+  village text default 'Desa Loa Lepu',
+  district text default 'Kecamatan Tenggarong Seberang',
+  regency text default 'Kabupaten Kutai Kartanegara',
+  province text default 'Kalimantan Timur',
+  latitude double precision,
+  longitude double precision,
+  bank_name text default '',
+  bank_account_number text default '',
+  bank_account_name text default '',
   created_at timestamptz not null default now(),
   approved_at timestamptz
 );
 
 create index if not exists idx_accounts_status on public.accounts(status, created_at desc);
+
+-- Pembaruan struktur utk basis data lama (aman dijalankan berulang)
+alter table public.accounts add column if not exists address_full text default '';
+alter table public.accounts add column if not exists village text default 'Desa Loa Lepu';
+alter table public.accounts add column if not exists district text default 'Kecamatan Tenggarong Seberang';
+alter table public.accounts add column if not exists regency text default 'Kabupaten Kutai Kartanegara';
+alter table public.accounts add column if not exists province text default 'Kalimantan Timur';
+alter table public.accounts add column if not exists latitude double precision;
+alter table public.accounts add column if not exists longitude double precision;
+alter table public.accounts add column if not exists bank_name text default '';
+alter table public.accounts add column if not exists bank_account_number text default '';
+alter table public.accounts add column if not exists bank_account_name text default '';
 
 -- ===== TABEL: LAHAN (Kelola Lahan) =====
 create table if not exists public.lands (
@@ -104,7 +126,8 @@ create table if not exists public.products (
 -- ===== TABEL: PESANAN (checkout Pasar Tani) =====
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references public.products(id),
+  product_id uuid references public.products(id) on delete set null,
+  owner_id uuid references public.accounts(id) on delete set null,
   product_name text not null,
   customer_name text not null,
   phone text not null,
@@ -113,8 +136,53 @@ create table if not exists public.orders (
   total double precision not null,
   status text not null default 'baru'
     check (status in ('baru','diproses','dikirim','selesai')),
+  payment_method text not null default 'cod'
+    check (payment_method in ('cod','transfer')),
+  payment_status text not null default 'menunggu'
+    check (payment_status in ('menunggu','terverifikasi')),
+  payment_proof text default '',
+  bank_name text default '',
+  bank_account_number text default '',
+  bank_account_name text default '',
+  confirmed_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Pembaruan struktur utk basis data lama (aman dijalankan berulang)
+alter table public.orders add column if not exists owner_id uuid references public.accounts(id) on delete set null;
+alter table public.orders add column if not exists payment_method text not null default 'cod';
+alter table public.orders add column if not exists payment_status text not null default 'menunggu';
+alter table public.orders add column if not exists payment_proof text default '';
+alter table public.orders add column if not exists bank_name text default '';
+alter table public.orders add column if not exists bank_account_number text default '';
+alter table public.orders add column if not exists bank_account_name text default '';
+alter table public.orders add column if not exists confirmed_at timestamptz;
+
+-- Relasi pesanan → produk boleh lepas bila produk dihapus petani
+-- (riwayat pesanan tetap tersimpan karena nama & total sudah disalin).
+do $$
+declare c text;
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.orders'::regclass and conname = 'orders_product_fk'
+  ) then
+    select conname into c from pg_constraint
+      where conrelid = 'public.orders'::regclass and contype = 'f'
+        and pg_get_constraintdef(oid) like '%product_id%';
+    if c is not null then
+      execute format('alter table public.orders drop constraint %I', c);
+    end if;
+    execute 'alter table public.orders alter column product_id drop not null';
+    execute 'alter table public.orders add constraint orders_product_fk foreign key (product_id) references public.products(id) on delete set null';
+  end if;
+end $$;
+
+-- Isi pemilik pesanan lama dari produk terkait (sekali jalan, idempoten)
+update public.orders o
+set owner_id = p.owner_id
+from public.products p
+where o.product_id = p.id and o.owner_id is null;
 
 -- ================================================================
 -- KEAMANAN BARIS (RLS)
@@ -235,6 +303,31 @@ from public.lands l
 where not exists (
   select 1 from public.activities a where a.land_id = l.id and a.title = 'Lahan didaftarkan ke platform'
 );
+
+-- ===== DATA CONTOH ALAMAT / GPS / REKENING PETANI (bila belum terisi) =====
+update public.accounts
+set address_full = 'Dusun Loa Lepu Ulu, RT 03 / RW 02',
+    village = 'Desa Loa Lepu',
+    district = 'Kecamatan Tenggarong Seberang',
+    regency = 'Kabupaten Kutai Kartanegara',
+    province = 'Kalimantan Timur',
+    latitude = -0.402834, longitude = 117.088412,
+    bank_name = 'BRI',
+    bank_account_number = '1234-01-234567-53-6',
+    bank_account_name = 'Sutrisno'
+where username = 'petani01' and coalesce(bank_name, '') = '';
+
+update public.accounts
+set address_full = 'Dusun Loa Lepu Ilir, RT 01 / RW 01',
+    village = 'Desa Loa Lepu',
+    district = 'Kecamatan Tenggarong Seberang',
+    regency = 'Kabupaten Kutai Kartanegara',
+    province = 'Kalimantan Timur',
+    latitude = -0.399210, longitude = 117.079350,
+    bank_name = 'Bank Kaltimtara',
+    bank_account_number = '010-02-01234-56-7',
+    bank_account_name = 'Mariati'
+where username = 'petani02' and coalesce(bank_name, '') = '';
 
 -- ===== KEPEMILIKAN DATA DEMO (bila belum ada pemiliknya) =====
 update public.lands

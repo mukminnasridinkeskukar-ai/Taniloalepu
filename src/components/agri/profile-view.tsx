@@ -6,12 +6,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Camera, Loader2, Save, KeyRound, UserRound, Phone, MapPin, AtSign, ShieldCheck } from "lucide-react";
+import {
+  Camera, Loader2, Save, KeyRound, UserRound, Phone, MapPin, AtSign, ShieldCheck,
+  Navigation, Landmark, LocateFixed, Map as MapIcon, BadgeCheck,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/lib/agri-types";
-import { ROLE_LABEL } from "@/lib/agri-types";
+import { ROLE_LABEL, BANK_OPTIONS, mapsLink } from "@/lib/agri-types";
 
 function initials(name: string): string {
   return name
@@ -53,11 +57,69 @@ export function ProfileView({ user, onUserUpdated }: { user: AuthUser; onUserUpd
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState({ name: user.name, phone: user.phone, address: user.address });
+  const [info, setInfo] = useState({
+    addressFull: user.addressFull ?? "",
+    village: user.village ?? "",
+    district: user.district ?? "",
+    regency: user.regency ?? "",
+    province: user.province ?? "",
+  });
+  const [coords, setCoords] = useState({
+    latitude: user.latitude != null ? String(user.latitude) : "",
+    longitude: user.longitude != null ? String(user.longitude) : "",
+  });
+  const [locating, setLocating] = useState(false);
+  const [bank, setBank] = useState({
+    bankName: user.bankName ?? "",
+    bankAccountNumber: user.bankAccountNumber ?? "",
+    bankAccountName: user.bankAccountName ?? "",
+  });
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [savingPw, setSavingPw] = useState(false);
+
+  const latNum = Number(coords.latitude);
+  const lngNum = Number(coords.longitude);
+  const hasCoord =
+    coords.latitude.trim() !== "" &&
+    coords.longitude.trim() !== "" &&
+    Number.isFinite(latNum) &&
+    Number.isFinite(lngNum);
+  const osmSrc = hasCoord
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${(lngNum - 0.004).toFixed(6)}%2C${(latNum - 0.003).toFixed(6)}%2C${(lngNum + 0.004).toFixed(6)}%2C${(latNum + 0.003).toFixed(6)}&layer=mapnik&marker=${latNum}%2C${lngNum}`
+    : "";
+
+  function ambilGps() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast({ title: "Perangkat tidak mendukung GPS", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        });
+        setLocating(false);
+        toast({
+          title: "Lokasi GPS berhasil diambil",
+          description: `Akurasi ±${Math.round(pos.coords.accuracy)} meter. Klik "Simpan Perubahan" untuk menyimpan.`,
+        });
+      },
+      () => {
+        setLocating(false);
+        toast({
+          title: "Gagal mengambil lokasi GPS",
+          description: "Aktifkan izin lokasi pada peramban lalu coba lagi, atau isi koordinat secara manual.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  }
 
   async function patchProfile(payload: Record<string, unknown>, successMsg: string) {
     const res = await fetch("/api/auth/profile", {
@@ -100,10 +162,30 @@ export function ProfileView({ user, onUserUpdated }: { user: AuthUser; onUserUpd
       toast({ title: "Nama tidak boleh kosong", variant: "destructive" });
       return;
     }
+    const lat = coords.latitude.trim();
+    const lng = coords.longitude.trim();
+    if ((lat && Number.isNaN(Number(lat))) || (lng && Number.isNaN(Number(lng)))) {
+      toast({ title: "Koordinat GPS harus berupa angka", description: "Contoh: -0.402834 dan 117.088412", variant: "destructive" });
+      return;
+    }
     setSavingProfile(true);
     try {
       await patchProfile(
-        { name: profile.name, phone: profile.phone, address: profile.address },
+        {
+          name: profile.name,
+          phone: profile.phone,
+          address: profile.address,
+          addressFull: info.addressFull,
+          village: info.village,
+          district: info.district,
+          regency: info.regency,
+          province: info.province,
+          latitude: lat === "" ? null : Number(lat),
+          longitude: lng === "" ? null : Number(lng),
+          bankName: bank.bankName,
+          bankAccountNumber: bank.bankAccountNumber,
+          bankAccountName: bank.bankAccountName,
+        },
         "Data akun berhasil disimpan"
       );
     } catch (err) {
@@ -250,6 +332,202 @@ export function ProfileView({ user, onUserUpdated }: { user: AuthUser; onUserUpd
           </form>
         </CardContent>
       </Card>
+
+      {/* Alamat lengkap & lokasi GPS */}
+      <Card className="mb-6 shadow-md">
+        <CardContent className="p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <MapPin className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="font-semibold">Alamat Lengkap &amp; Lokasi GPS</h3>
+              <p className="text-xs text-muted-foreground">
+                Tampil pada produk Anda di Pasar Tani agar pembeli tahu asal hasil panen
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="pf-address-full">Alamat Lengkap (Jalan / Dusun / RT-RW)</Label>
+              <Textarea
+                id="pf-address-full"
+                rows={2}
+                placeholder="cth. Jl. Melati No. 8, Dusun Loa Lepu Ulu, RT 03 / RW 02"
+                value={info.addressFull}
+                onChange={(e) => setInfo((p) => ({ ...p, addressFull: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-village">Desa / Kelurahan</Label>
+                <Input
+                  id="pf-village"
+                  placeholder="cth. Desa Loa Lepu"
+                  value={info.village}
+                  onChange={(e) => setInfo((p) => ({ ...p, village: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-district">Kecamatan</Label>
+                <Input
+                  id="pf-district"
+                  placeholder="cth. Kecamatan Tenggarong Seberang"
+                  value={info.district}
+                  onChange={(e) => setInfo((p) => ({ ...p, district: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-regency">Kabupaten</Label>
+                <Input
+                  id="pf-regency"
+                  placeholder="cth. Kabupaten Kutai Kartanegara"
+                  value={info.regency}
+                  onChange={(e) => setInfo((p) => ({ ...p, regency: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-province">Provinsi</Label>
+                <Input
+                  id="pf-province"
+                  placeholder="cth. Kalimantan Timur"
+                  value={info.province}
+                  onChange={(e) => setInfo((p) => ({ ...p, province: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>
+                  Koordinat GPS (garis lintang &amp; bujur)
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={ambilGps} disabled={locating} className="gap-1.5">
+                  {locating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {locating ? "Mencari lokasi…" : "Ambil Lokasi GPS Saat Ini"}
+                </Button>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pf-lat" className="text-xs text-muted-foreground">Garis lintang (latitude)</Label>
+                  <Input
+                    id="pf-lat"
+                    inputMode="decimal"
+                    placeholder="cth. -0.402834"
+                    value={coords.latitude}
+                    onChange={(e) => setCoords((p) => ({ ...p, latitude: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pf-lng" className="text-xs text-muted-foreground">Garis bujur (longitude)</Label>
+                  <Input
+                    id="pf-lng"
+                    inputMode="decimal"
+                    placeholder="cth. 117.088412"
+                    value={coords.longitude}
+                    onChange={(e) => setCoords((p) => ({ ...p, longitude: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {hasCoord && (
+              <div className="overflow-hidden rounded-xl border border-border/70">
+                <iframe
+                  title="Peta pratinjau lokasi"
+                  src={osmSrc}
+                  className="h-48 w-full border-0"
+                  loading="lazy"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Navigation className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                    Titik GPS: {latNum.toFixed(5)}, {lngNum.toFixed(5)}
+                  </span>
+                  {mapsLink(latNum, lngNum) && (
+                    <a
+                      href={mapsLink(latNum, lngNum)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      Buka di peta
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Rekening bank untuk pembayaran transfer */}
+      {user.role !== "operator" && (
+        <Card className="mb-6 shadow-md">
+          <CardContent className="p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Landmark className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="font-semibold">Rekening Bank Penerima Pembayaran</h3>
+                <p className="text-xs text-muted-foreground">
+                  Dipakai pembeli saat memilih metode Transfer Bank di Pasar Tani
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-bank">Nama Bank</Label>
+                <Input
+                  id="pf-bank"
+                  list="bank-options"
+                  placeholder="cth. BRI"
+                  value={bank.bankName}
+                  onChange={(e) => setBank((p) => ({ ...p, bankName: e.target.value }))}
+                />
+                <datalist id="bank-options">
+                  {BANK_OPTIONS.map((b) => (
+                    <option key={b} value={b} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-bank-no">Nomor Rekening</Label>
+                <Input
+                  id="pf-bank-no"
+                  inputMode="numeric"
+                  placeholder="cth. 1234-01-234567-53-6"
+                  value={bank.bankAccountNumber}
+                  onChange={(e) => setBank((p) => ({ ...p, bankAccountNumber: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-bank-name">Atas Nama</Label>
+                <Input
+                  id="pf-bank-name"
+                  placeholder="cth. Sutrisno"
+                  value={bank.bankAccountName}
+                  onChange={(e) => setBank((p) => ({ ...p, bankAccountName: e.target.value }))}
+                />
+              </div>
+            </div>
+            {bank.bankName && bank.bankAccountNumber ? (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700">
+                <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                Pembeli transfer ke {bank.bankName} {bank.bankAccountNumber} a.n. {bank.bankAccountName || user.name}
+              </p>
+            ) : (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                Lengkapi rekening agar pembeli dapat membayar via transfer bank.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Kata sandi */}
       <Card className="shadow-md">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,15 +16,23 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Loader2, ShoppingCart, Star, MapPin, Plus, Minus, Trash2, Store,
-  PackageCheck, Truck, Leaf, X, Sprout, LogIn,
+  PackageCheck, Truck, Leaf, X, Sprout, LogIn, Pencil, Landmark, Banknote,
+  Navigation, MessageCircle, Upload, BadgeCheck,
 } from "lucide-react";
 import type { Product, AuthUser } from "@/lib/agri-types";
-import { PRODUCT_CATEGORIES, rupiah, parseJsonArr } from "@/lib/agri-types";
+import {
+  PRODUCT_CATEGORIES, rupiah, parseJsonArr, waLink, mapsLink, fmtCoord,
+} from "@/lib/agri-types";
+import { fileToDataUrl } from "@/lib/image-utils";
 import { HERO_IMAGES, PRODUCT_PRESET_IMAGES } from "@/lib/agri-content";
 import type { ViewKey } from "./header";
 
@@ -53,9 +61,22 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
   const [checkoutForm, setCheckoutForm] = useState({ customerName: "", phone: "", address: "" });
   const [placing, setPlacing] = useState(false);
 
+  // Pembayaran: COD / transfer bank + bukti transfer dari pembeli
+  const [payMethod, setPayMethod] = useState<"cod" | "transfer">("cod");
+  const [proofUrl, setProofUrl] = useState("");
+  const [proofPicking, setProofPicking] = useState(false);
+  const [details, setDetails] = useState<Record<string, Product>>({});
+
+  // Kelola produk sendiri: ubah & hapus
+  const [editTarget, setEditTarget] = useState<Product | null>(null);
+  const [delTarget, setDelTarget] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const [sellOpen, setSellOpen] = useState(false);
   const [sellForm, setSellForm] = useState({ ...EMPTY_SELL });
   const [selling, setSelling] = useState(false);
+
+  const proofRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async (query: string, cat: string, sortKey: string) => {
     setLoading(true);
@@ -79,6 +100,30 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
     return () => clearTimeout(t);
   }, [q, category, sort, fetchProducts]);
 
+  // Saat dialog checkout dibuka: ambil detail tiap produk (info rekening & alamat penjual)
+  useEffect(() => {
+    if (!checkoutOpen || cart.length === 0) return;
+    let alive = true;
+    (async () => {
+      const results = await Promise.all(
+        cart.map((c) =>
+          fetch(`/api/products/${c.productId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        )
+      );
+      if (!alive) return;
+      const map: Record<string, Product> = {};
+      for (const d of results) {
+        if (d && typeof d === "object" && "id" in d) map[(d as Product).id] = d as Product;
+      }
+      setDetails(map);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [checkoutOpen, cart]);
+
   function addToCart(p: Product, quantity: number) {
     setCart((prev) => {
       const existing = prev.find((c) => c.productId === p.id);
@@ -98,37 +143,126 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
   const cartTotal = useMemo(() => cart.reduce((a, c) => a + c.price * c.qty, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((a, c) => a + c.qty, 0), [cart]);
 
+  // Kelompokkan item keranjang per penjual (untuk instruksi rekening transfer)
+  const sellerGroups = useMemo(() => {
+    const groups: { key: string; seller: string; bank: string; account: string; holder: string; total: number; phone: string }[] = [];
+    for (const c of cart) {
+      const d = details[c.productId];
+      const seller = d?.farmerName ?? "Petani";
+      const key = d?.sellerBankAccountNumber || `nonbank-${d?.farmerName ?? c.productId}`;
+      const g = groups.find((x) => x.key === key);
+      if (g) g.total += c.price * c.qty;
+      else
+        groups.push({
+          key,
+          seller,
+          bank: d?.sellerBankName ?? "",
+          account: d?.sellerBankAccountNumber ?? "",
+          holder: d?.sellerBankAccountName ?? "",
+          total: c.price * c.qty,
+          phone: d?.sellerPhone ?? "",
+        });
+    }
+    return groups;
+  }, [cart, details]);
+
+  async function pickProof(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Pilih berkas gambar (JPG/PNG)", variant: "destructive" });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "Ukuran foto maksimal 10 MB", variant: "destructive" });
+      return;
+    }
+    setProofPicking(true);
+    try {
+      const dataUrl = await fileToDataUrl(file, { maxSide: 1000, quality: 0.72 });
+      setProofUrl(dataUrl);
+      toast({ title: "Bukti transfer siap dilampirkan" });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Gagal memproses foto", variant: "destructive" });
+    } finally {
+      setProofPicking(false);
+    }
+  }
+
   async function placeOrder() {
     if (!checkoutForm.customerName.trim() || !checkoutForm.phone.trim() || !checkoutForm.address.trim()) {
       toast({ title: "Lengkapi nama, telepon, dan alamat", variant: "destructive" });
       return;
     }
+    if (payMethod === "transfer" && !proofUrl) {
+      toast({
+        title: "Unggah bukti transfer terlebih dahulu",
+        description: "Transfer sesuai total ke rekening petani, lalu unggah foto bukti transfernya.",
+        variant: "destructive",
+      });
+      return;
+    }
     setPlacing(true);
     try {
-      // kirim satu pesanan per item (sederhana & andal)
+      // kirim satu pesanan per item (sederhana & andal) — rekening tiap penjual tersalin otomatis
       for (const item of cart) {
         const res = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...checkoutForm, productId: item.productId, quantity: item.qty }),
+          body: JSON.stringify({
+            ...checkoutForm,
+            productId: item.productId,
+            quantity: item.qty,
+            paymentMethod: payMethod,
+            paymentProof: payMethod === "transfer" ? proofUrl : "",
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
       }
       toast({
         title: "Pesanan berhasil dibuat!",
-        description: "Petani akan menghubungi Anda untuk konfirmasi pengiriman. Terima kasih telah mendukung petani lokal!",
+        description:
+          payMethod === "transfer"
+            ? "Bukti transfer Anda terlampir — petani akan memverifikasi pembayaran lalu menghubungi Anda."
+            : "Bayar tunai saat pesanan diterima. Petani akan menghubungi Anda untuk konfirmasi pengiriman.",
       });
       setCart([]);
       setCheckoutOpen(false);
       setCartOpen(false);
       setCheckoutForm({ customerName: "", phone: "", address: "" });
+      setPayMethod("cod");
+      setProofUrl("");
+      setDetails({});
       void fetchProducts(q, category, sort);
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : "Gagal memesan", variant: "destructive" });
     } finally {
       setPlacing(false);
     }
+  }
+
+  function openSell() {
+    setEditTarget(null);
+    setSellForm({ ...EMPTY_SELL });
+    setSellOpen(true);
+  }
+
+  function openEdit(p: Product) {
+    setEditTarget(p);
+    setSellForm({
+      name: p.name,
+      category: p.category,
+      price: String(p.price),
+      unit: p.unit,
+      stock: String(p.stock),
+      description: p.description,
+      location: p.location,
+      imageUrl: p.imageUrl,
+      isOrganic: p.isOrganic,
+    });
+    setSellOpen(true);
   }
 
   async function sellProduct() {
@@ -143,28 +277,59 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
     }
     setSelling(true);
     try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...sellForm,
-          price: Number(sellForm.price),
-          stock: Number(sellForm.stock || 1),
-          gallery: [],
-        }),
-      });
+      const base = {
+        ...sellForm,
+        price: Number(sellForm.price),
+        stock: Math.max(0, Math.floor(Number(sellForm.stock || (editTarget ? 0 : 1)))),
+        gallery: [],
+      };
+      const res = editTarget
+        ? await fetch(`/api/products/${editTarget.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(base),
+          })
+        : await fetch("/api/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...base, stock: base.stock || 1 }),
+          });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast({ title: "Produk berhasil dipasang!", description: `${sellForm.name} kini tampil di Pasar Tani.` });
+      toast({
+        title: editTarget ? "Produk berhasil diperbarui!" : "Produk berhasil dipasang!",
+        description: editTarget ? `${sellForm.name} telah diperbarui di Pasar Tani.` : `${sellForm.name} kini tampil di Pasar Tani.`,
+      });
       setSellOpen(false);
+      setEditTarget(null);
       setSellForm({ ...EMPTY_SELL });
       void fetchProducts(q, category, sort);
     } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Gagal memasang produk", variant: "destructive" });
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan produk", variant: "destructive" });
     } finally {
       setSelling(false);
     }
   }
+
+  async function deleteProduct() {
+    if (!delTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/products/${delTarget.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: "Produk dihapus", description: data.message ?? `${delTarget.name} ditarik dari Pasar Tani.` });
+      if (detail?.id === delTarget.id) setDetail(null);
+      setDelTarget(null);
+      void fetchProducts(q, category, sort);
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menghapus produk", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const isOwn = (p: Product) => !!user && (p.ownerId === user.id || user.role === "superadmin");
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -185,7 +350,7 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
           </div>
           <div className="flex flex-wrap gap-3">
             {user && user.role !== "operator" ? (
-              <Button variant="outline" onClick={() => setSellOpen(true)} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+              <Button variant="outline" onClick={openSell} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
                 <Store className="mr-2 h-4 w-4" aria-hidden="true" /> Jual Hasil Panen
               </Button>
             ) : !user ? (
@@ -293,11 +458,37 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
             >
               <div className="relative h-44 overflow-hidden">
                 <img
-                  src={p.imageUrl}
+                  src={p.imageUrl || PRODUCT_PRESET_IMAGES[0]}
                   alt={`Produk ${p.name}`}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
+                {isOwn(p) && (
+                  <div className="absolute right-2 top-2 z-10 flex gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(p);
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-emerald-700 shadow-md transition-all hover:scale-110 hover:bg-white"
+                      aria-label={`Ubah produk ${p.name}`}
+                      title="Ubah produk"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDelTarget(p);
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-600 shadow-md transition-all hover:scale-110 hover:bg-white"
+                      aria-label={`Hapus produk ${p.name}`}
+                      title="Hapus produk"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
                 {p.isOrganic && (
                   <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white backdrop-blur">
                     <Leaf className="h-3 w-3" aria-hidden="true" /> Organik
@@ -385,6 +576,53 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
                       {detail.farmerName} · {detail.location}
                     </p>
                   </div>
+
+                  {/* Alamat lengkap & koordinat GPS petani penjual */}
+                  {(detail.sellerAddress || detail.sellerLat != null) && (
+                    <div className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-3 text-sm">
+                      <p className="flex items-start gap-2">
+                        <Store className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        <span>
+                          <span className="font-medium">Alamat petani:</span>{" "}
+                          {detail.sellerAddress || detail.location}
+                        </span>
+                      </p>
+                      {detail.sellerLat != null && detail.sellerLng != null && (
+                        <p className="flex items-start gap-2">
+                          <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                          <span>
+                            <span className="font-medium">Titik GPS:</span> {fmtCoord(detail.sellerLat)}, {fmtCoord(detail.sellerLng)}
+                            {mapsLink(detail.sellerLat, detail.sellerLng) && (
+                              <>
+                                {" "}·{" "}
+                                <a
+                                  href={mapsLink(detail.sellerLat, detail.sellerLng)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-medium text-primary underline underline-offset-2"
+                                >
+                                  Buka peta
+                                </a>
+                              </>
+                            )}
+                          </span>
+                        </p>
+                      )}
+                      {detail.sellerPhone && waLink(detail.sellerPhone, `Halo, saya tertarik dengan produk "${detail.name}" di Pasar Tani.`) && (
+                        <p className="flex items-start gap-2">
+                          <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                          <a
+                            href={waLink(detail.sellerPhone, `Halo, saya tertarik dengan produk "${detail.name}" di Pasar Tani.`)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-primary underline underline-offset-2"
+                          >
+                            Hubungi petani via WhatsApp
+                          </a>
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     {detail.isOrganic && (
@@ -488,6 +726,96 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
             </div>
             <Separator />
             <div className="space-y-2">
+              <p className="text-sm font-semibold">Metode pembayaran</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setPayMethod("cod")}
+                  className={`flex items-start gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
+                    payMethod === "cod" ? "border-primary bg-primary/5 ring-1 ring-ring/30" : "border-border bg-card hover:border-primary/40"
+                  }`}
+                  aria-pressed={payMethod === "cod"}
+                >
+                  <Banknote className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <span>
+                    <span className="block text-sm font-semibold">Tunai (COD)</span>
+                    <span className="block text-xs text-muted-foreground">Bayar tunai saat pesanan tiba</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayMethod("transfer")}
+                  className={`flex items-start gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
+                    payMethod === "transfer" ? "border-primary bg-primary/5 ring-1 ring-ring/30" : "border-border bg-card hover:border-primary/40"
+                  }`}
+                  aria-pressed={payMethod === "transfer"}
+                >
+                  <Landmark className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <span>
+                    <span className="block text-sm font-semibold">Transfer Bank</span>
+                    <span className="block text-xs text-muted-foreground">Transfer ke rekening petani + unggah bukti</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {payMethod === "transfer" && (
+              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/40 p-3.5">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Landmark className="h-4 w-4 text-primary" aria-hidden="true" /> Rekening tujuan transfer
+                </p>
+                <div className="space-y-2">
+                  {sellerGroups.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Memuat rekening petani…</p>
+                  )}
+                  {sellerGroups.map((g) => (
+                    <div key={g.key} className="rounded-lg border border-border/60 bg-card p-2.5 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <p className="font-medium">{g.seller}</p>
+                        <p className="font-semibold text-primary">{rupiah(g.total)}</p>
+                      </div>
+                      {g.bank && g.account ? (
+                        <p className="mt-0.5 text-muted-foreground">
+                          {g.bank} · <span className="font-mono font-medium text-foreground">{g.account}</span> · a.n. {g.holder || g.seller}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-amber-600">
+                          Rekening belum diatur petani ini — silakan hubungi petani untuk koordinasi pembayaran.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="co-proof">Bukti transfer *</Label>
+                  <input ref={proofRef} id="co-proof" type="file" accept="image/*" className="hidden" onChange={pickProof} aria-label="Unggah bukti transfer" />
+                  {proofUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img src={proofUrl} alt="Pratinjau bukti transfer" className="h-20 w-20 rounded-lg border object-cover" />
+                      <div className="flex flex-col gap-1.5">
+                        <Badge className="w-fit gap-1 bg-emerald-600 text-white">
+                          <BadgeCheck className="h-3 w-3" aria-hidden="true" /> Bukti siap dilampirkan
+                        </Badge>
+                        <Button type="button" variant="outline" size="sm" onClick={() => proofRef.current?.click()} disabled={proofPicking}>
+                          {proofPicking ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />} Ganti foto
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button type="button" variant="outline" className="w-full border-dashed" onClick={() => proofRef.current?.click()} disabled={proofPicking}>
+                      {proofPicking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                      Unggah foto bukti transfer
+                    </Button>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Transfer sesuai total ke rekening petani di atas, lalu unggah foto struk / tangkapan layar m-banking Anda. Bukti akan diverifikasi petani.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <Separator />
+            <div className="space-y-2">
               <p className="text-sm font-semibold">Ringkasan pesanan</p>
               {cart.map((c) => (
                 <div key={c.productId} className="flex justify-between gap-3 text-sm">
@@ -512,16 +840,18 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
         </DialogContent>
       </Dialog>
 
-      {/* ===== Dialog jual produk ===== */}
-      <Dialog open={sellOpen} onOpenChange={setSellOpen}>
+      {/* ===== Dialog jual / ubah produk ===== */}
+      <Dialog open={sellOpen} onOpenChange={(v) => { setSellOpen(v); if (!v) setEditTarget(null); }}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sprout className="h-5 w-5 text-primary" aria-hidden="true" />
-              Jual Hasil Panen Anda
+              {editTarget ? "Ubah Produk Hasil Panen" : "Jual Hasil Panen Anda"}
             </DialogTitle>
             <DialogDescription>
-              Pasang produk Anda di Pasar Tani — masyarakat langsung bisa melihat dan memesan.
+              {editTarget
+                ? "Perbarui informasi produk Anda — perubahan langsung tampil di Pasar Tani."
+                : "Pasang produk Anda di Pasar Tani — masyarakat langsung bisa melihat dan memesan."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -608,14 +938,41 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSellOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => { setSellOpen(false); setEditTarget(null); }}>Batal</Button>
             <Button onClick={sellProduct} disabled={selling} className="gap-2">
               {selling && <Loader2 className="h-4 w-4 animate-spin" />}
-              Pasang di Pasar Tani
+              {editTarget ? "Simpan Perubahan" : "Pasang di Pasar Tani"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ===== Konfirmasi hapus produk ===== */}
+      <AlertDialog open={!!delTarget} onOpenChange={(v) => !v && setDelTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus produk ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Produk <span className="font-semibold text-foreground">{delTarget?.name}</span> akan ditarik dari Pasar Tani.
+              Riwayat pesanan yang sudah masuk tetap tersimpan. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void deleteProduct();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Ya, Hapus Produk
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -651,7 +1008,7 @@ function CartSheetContent({
           <div className="nice-scroll flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {cart.map((c) => (
               <div key={c.productId} className="flex gap-3 rounded-xl border border-border/70 p-3">
-                <img src={c.imageUrl} alt={c.name} className="h-16 w-16 rounded-lg object-cover" loading="lazy" />
+                <img src={c.imageUrl || PRODUCT_PRESET_IMAGES[0]} alt={c.name} className="h-16 w-16 rounded-lg object-cover" loading="lazy" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{c.name}</p>
                   <p className="text-sm font-bold text-primary">{rupiah(c.price)} <span className="text-xs font-normal text-muted-foreground">/ {c.unit}</span></p>
