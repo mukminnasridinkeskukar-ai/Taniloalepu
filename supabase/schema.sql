@@ -29,7 +29,7 @@ create table if not exists public.lands (
   owner_id uuid references public.accounts(id) on delete set null,
   name text not null,
   location text not null,
-  area numeric not null check (area > 0),
+  area double precision not null check (area > 0),
   area_unit text not null default 'm2',
   soil_type text not null default 'tanah-merah',
   status text not null default 'persiapan'
@@ -37,7 +37,7 @@ create table if not exists public.lands (
   planned_crop text default '',
   image_url text default '',
   notes text default '',
-  completed_steps jsonb not null default '[]'::jsonb,
+  completed_steps text not null default '[]',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -67,10 +67,10 @@ create table if not exists public.crops (
   season text default 'Sepanjang tahun',
   description text default '',
   image_url text default '',
-  gallery jsonb not null default '[]'::jsonb,
-  planting_steps jsonb not null default '[]'::jsonb,
-  care_tips jsonb not null default '[]'::jsonb,
-  diseases jsonb not null default '[]'::jsonb,
+  gallery text not null default '[]',
+  planting_steps text not null default '[]',
+  care_tips text not null default '[]',
+  diseases text not null default '[]',
   price_range text default ''
 );
 
@@ -80,15 +80,15 @@ create table if not exists public.products (
   owner_id uuid references public.accounts(id) on delete set null,
   name text not null,
   category text not null default 'sayuran',
-  price numeric not null check (price > 0),
+  price double precision not null check (price > 0),
   unit text not null default 'kg',
   stock integer not null default 0 check (stock >= 0),
   description text default '',
   image_url text default '',
-  gallery jsonb not null default '[]'::jsonb,
+  gallery text not null default '[]',
   farmer_name text not null,
   location text not null,
-  rating numeric not null default 4.8,
+  rating double precision not null default 4.8,
   sold integer not null default 0,
   is_organic boolean not null default false,
   created_at timestamptz not null default now()
@@ -103,7 +103,7 @@ create table if not exists public.orders (
   phone text not null,
   address text not null,
   quantity integer not null check (quantity > 0),
-  total numeric not null,
+  total double precision not null,
   status text not null default 'baru'
     check (status in ('baru','diproses','dikirim','selesai')),
   created_at timestamptz not null default now()

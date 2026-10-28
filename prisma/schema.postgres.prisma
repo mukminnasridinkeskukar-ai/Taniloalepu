@@ -1,0 +1,133 @@
+// Skema Prisma untuk basis data PostgreSQL (deployment produksi: Vercel + Supabase).
+//
+// Dipilih otomatis oleh scripts/prisma-setup.mjs saat DATABASE_URL diawali "postgres".
+// Nama tabel & kolom dipetakan (@@map/@map) agar cocok dengan supabase/schema.sql:
+//   accounts, lands, activities, crops, products, orders (snake_case).
+//
+// Sinkronisasi struktur:
+//   - Kolom larik disimpan sebagai teks JSON ("[]") — sama seperti mode demo.
+//   - Angka desimal memakai double precision (Float) — samakan di schema.sql.
+//   - Tanggal memakai timestamptz.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== PENGGUNA (petani | operator | superadmin) =====
+model User {
+  id         String    @id @default(uuid()) @db.Uuid
+  username   String    @unique
+  password   String // dikelola platform; dapat dilihat operator utk bantu pemulihan akun
+  name       String
+  role       String    @default("petani") // petani | operator | superadmin
+  status     String    @default("menunggu") // menunggu | aktif | ditolak
+  phone      String    @default("")
+  address    String    @default("")
+  avatarUrl  String    @default("") @map("avatar_url")
+  lands      Land[]
+  products   Product[]
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+
+  @@map("accounts")
+}
+
+// ===== LAHAN (Kelola Lahan) =====
+model Land {
+  id             String     @id @default(uuid()) @db.Uuid
+  ownerId        String?    @map("owner_id") @db.Uuid
+  owner          User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  name           String
+  location       String
+  area           Float
+  areaUnit       String     @default("m2") @map("area_unit")
+  soilType       String     @default("tanah-merah") @map("soil_type")
+  status         String     @default("persiapan") // persiapan | tanam | perawatan | panen | pasca
+  plannedCrop    String     @default("") @map("planned_crop")
+  imageUrl       String     @default("") @map("image_url")
+  notes          String     @default("")
+  completedSteps String     @default("[]") @map("completed_steps") // JSON array: id langkah persiapan yang selesai
+  activities     Activity[]
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("lands")
+}
+
+model Activity {
+  id     String   @id @default(uuid()) @db.Uuid
+  landId String   @map("land_id") @db.Uuid
+  land   Land     @relation(fields: [landId], references: [id], onDelete: Cascade)
+  title  String
+  note   String   @default("")
+  date   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("activities")
+}
+
+// ===== TANAMAN (Kenali & Rawat) =====
+model Crop {
+  id            String @id @default(uuid()) @db.Uuid
+  slug          String @unique
+  name          String
+  latinName     String @default("") @map("latin_name")
+  category      String // padi-padian | sayuran | hortikultura | umbi | palawija
+  difficulty    String @default("sedang") // mudah | sedang | sulit
+  harvestDays   Int    @default(90) @map("harvest_days")
+  waterNeed     String @default("sedang") @map("water_need")
+  sunNeed       String @default("terang") @map("sun_need")
+  season        String @default("Sepanjang tahun")
+  description   String
+  imageUrl      String @map("image_url")
+  gallery       String @default("[]") // JSON array url
+  plantingSteps String @default("[]") @map("planting_steps") // JSON array string
+  careTips      String @default("[]") @map("care_tips") // JSON array string
+  diseases      String @default("[]") // JSON [{name, symptom, treatment}]
+  priceRange    String @default("") @map("price_range")
+
+  @@map("crops")
+}
+
+// ===== PRODUK (Pasar Tani) =====
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String?  @map("owner_id") @db.Uuid
+  owner       User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  name        String
+  category    String // sayuran | buah | beras-palawija | olahan | protein
+  price       Float
+  unit        String   @default("kg")
+  stock       Int      @default(0)
+  description String   @default("")
+  imageUrl    String   @map("image_url")
+  gallery     String   @default("[]")
+  farmerName  String   @map("farmer_name")
+  location    String
+  rating      Float    @default(4.8)
+  sold        Int      @default(0)
+  isOrganic   Boolean  @default(false) @map("is_organic")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("products")
+}
+
+// ===== PESANAN (checkout Pasar Tani) =====
+model Order {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  productName  String   @map("product_name")
+  customerName String   @map("customer_name")
+  phone        String
+  address      String
+  quantity     Int
+  total        Float
+  status       String   @default("baru") // baru | diproses | dikirim | selesai
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("orders")
+}
