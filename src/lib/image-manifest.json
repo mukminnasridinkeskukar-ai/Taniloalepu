@@ -1,0 +1,122 @@
+{
+ "crop_bawang": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/475261a01b5c.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ab10c8766b9d.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8cdfb5b920eb.jpg"
+ ],
+ "crop_cabai": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/34ce79d02bc2.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7813494f6037.webp",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/2ef097f85bfd.png",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/fa6ce751fc66.jpg"
+ ],
+ "crop_jagung": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/24bcfb2faa25.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/9ec90db270a9.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/468ba41b3b67.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/1d55ab00900b.jpg"
+ ],
+ "crop_kangkung": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"
+ ],
+ "crop_kedelai": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/36cccf361def.jpg"
+ ],
+ "crop_padi": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/cbd8fa8b4aa2.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/04c0b9d8c114.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b831e66cf439.png"
+ ],
+ "crop_singkong": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/09448931a66e.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d47c32a4d85d.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0b27213e7ee0.jpg"
+ ],
+ "crop_tomat": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/96111896d258.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/1b6cf6c45b77.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/f489b75a9d6a.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ad0d51ef2ad4.jpg"
+ ],
+ "hero_farmer": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b743a5b14030.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/200c121de414.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ecd0cc3f83d4.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d8da52d64dcd.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d9825d4d38bb.jpg"
+ ],
+ "hero_sawah": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7420d763deba.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d4f9727d1b0b.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/035efeb31b24.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8191ebee9866.jpg"
+ ],
+ "prep_fertilizer": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8d0924b5300d.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/62584bb409b4.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/222354ebaf5c.jpg"
+ ],
+ "prep_irrigation": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13fb26479903.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0033710f01f3.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b58dc4bdf453.jpg"
+ ],
+ "prep_planting": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/cc32e526dbd5.jpg"
+ ],
+ "prep_tractor": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b5696f3223fe.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e99a3159635.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/50c2a4988d15.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b2485f3bf2ca.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3197e490ec00.jpg"
+ ],
+ "prod_beras": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/66d16b8a0ab4.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/fee536709cc8.webp",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e85f546881ed.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/eeaf03cc4045.jpg"
+ ],
+ "prod_cabai": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/416a5f20be86.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/58d93424efc4.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/a5c14d7c3068.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/83d897e54649.jpeg"
+ ],
+ "prod_jagung": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/887e35135247.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/15438e5c3a47.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bddc7b142463.jpg"
+ ],
+ "prod_kangkung": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"
+ ],
+ "prod_madu": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/02fbad5329de.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/4d152dd15e97.jpeg"
+ ],
+ "prod_mangga": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0f361e6c51ed.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/70dadea900b9.jpeg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e4a06e4795eb.jpg"
+ ],
+ "prod_pisang": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b0164709bffa.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/6e1f4d1de1d0.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0bfa78fac27a.jpeg"
+ ],
+ "prod_sayur": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png"
+ ],
+ "prod_telur": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/112eb8e5928f.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ce4fbe0142b9.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e5d152abe20.jpg"
+ ],
+ "prod_tomat": [
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg",
+  "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bedf3788be6e.jpg"
+ ]
+}

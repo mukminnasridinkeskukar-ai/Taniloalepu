@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== LAHAN (Kelola Lahan) =====
+model Land {
+  id             String     @id @default(cuid())
+  name           String
+  location       String
+  area           Float
+  areaUnit       String     @default("m2")
+  soilType       String     @default("tanah-merah")
+  status         String     @default("persiapan") // persiapan | tanam | perawatan | panen | pasca
+  plannedCrop    String     @default("")
+  imageUrl       String     @default("")
+  notes          String     @default("")
+  completedSteps String     @default("[]") // JSON array: id langkah persiapan yang selesai
+  activities     Activity[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Activity {
+  id      String   @id @default(cuid())
+  landId  String
+  land    Land     @relation(fields: [landId], references: [id], onDelete: Cascade)
+  title   String
+  note    String   @default("")
+  date    DateTime @default(now())
+}
+
+// ===== TANAMAN (Kenali & Rawat) =====
+model Crop {
+  id            String @id @default(cuid())
+  slug          String @unique
+  name          String
+  latinName     String @default("")
+  category      String // padi-padian | sayuran | hortikultura | umbi | palawija
+  difficulty    String @default("sedang") // mudah | sedang | sulit
+  harvestDays   Int    @default(90)
+  waterNeed     String @default("sedang")
+  sunNeed       String @default("terang")
+  season        String @default("Sepanjang tahun")
+  description   String
+  imageUrl      String
+  gallery       String @default("[]") // JSON array url
+  plantingSteps String @default("[]") // JSON array string
+  careTips      String @default("[]") // JSON array string
+  diseases      String @default("[]") // JSON [{name, symptom, treatment}]
+  priceRange    String @default("")
+}
+
+// ===== PRODUK (Pasar Tani) =====
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  category    String // sayuran | buah | beras-palawija | olahan | protein
+  price       Float
+  unit        String   @default("kg")
+  stock       Int      @default(0)
+  description String   @default("")
+  imageUrl    String
+  gallery     String   @default("[]")
+  farmerName  String
+  location    String
+  rating      Float    @default(4.8)
+  sold        Int      @default(0)
+  isOrganic   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// ===== PESANAN (checkout Pasar Tani) =====
+model Order {
+  id           String   @id @default(cuid())
+  productId    String
+  productName  String
+  customerName String
+  phone        String
+  address      String
+  quantity     Int
+  total        Float
+  status       String   @default("baru") // baru | diproses | dikirim | selesai
+  createdAt    DateTime @default(now())
+}
