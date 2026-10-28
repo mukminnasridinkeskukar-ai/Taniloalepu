@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // PATCH /api/auth/profile — ubah data akun (nama, telepon, alamat, foto profil, kata sandi)
@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest) {
       if (body.newPassword.length < 6) {
         return NextResponse.json({ error: "Kata sandi baru minimal 6 karakter" }, { status: 400 });
       }
-      const user = await db.user.findUnique({ where: { id: session.id } });
+      const user = await store.users.byId(session.id);
       if (!user || user.password !== String(body.currentPassword ?? "")) {
         return NextResponse.json({ error: "Kata sandi lama tidak sesuai" }, { status: 400 });
       }
@@ -44,18 +44,18 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Tidak ada perubahan data" }, { status: 400 });
     }
 
-    const updated = await db.user.update({ where: { id: session.id }, data });
+    const updated = await store.users.update(session.id, data);
     return NextResponse.json({
       ok: true,
       user: {
-        id: updated.id,
-        username: updated.username,
-        name: updated.name,
-        role: updated.role,
-        status: updated.status,
-        phone: updated.phone,
-        address: updated.address,
-        avatarUrl: updated.avatarUrl,
+        id: updated?.id,
+        username: updated?.username,
+        name: updated?.name,
+        role: updated?.role,
+        status: updated?.status,
+        phone: updated?.phone,
+        address: updated?.address,
+        avatarUrl: updated?.avatarUrl,
       },
     });
   } catch (err) {

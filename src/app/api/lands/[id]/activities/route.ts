@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // POST /api/lands/[id]/activities — tambah catatan aktivitas ke lahan (pemilik / admin desa)
@@ -18,19 +18,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!title) {
       return NextResponse.json({ error: "Judul aktivitas wajib diisi" }, { status: 400 });
     }
-    const land = await db.land.findUnique({ where: { id } });
+    const land = await store.lands.byId(id);
     if (!land) {
       return NextResponse.json({ error: "Lahan tidak ditemukan" }, { status: 404 });
     }
     if (session.role !== "superadmin" && land.ownerId !== session.id) {
       return NextResponse.json({ error: "Anda hanya dapat mencatat aktivitas pada lahan milik sendiri" }, { status: 403 });
     }
-    const activity = await db.activity.create({
-      data: {
-        landId: id,
-        title: title.slice(0, 120),
-        note: String(body.note ?? "").slice(0, 400),
-      },
+    const activity = await store.activities.create({
+      landId: id,
+      title: title.slice(0, 120),
+      note: String(body.note ?? "").slice(0, 400),
     });
     return NextResponse.json(activity, { status: 201 });
   } catch (err) {
@@ -43,11 +41,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const activities = await db.activity.findMany({
-      where: { landId: id },
-      orderBy: { date: "desc" },
-      take: 50,
-    });
+    const activities = await store.activities.listByLand(id, 50);
     return NextResponse.json(activities);
   } catch (err) {
     console.error(err);

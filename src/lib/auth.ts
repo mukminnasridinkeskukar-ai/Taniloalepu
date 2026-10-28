@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 
 /**
  * Sesi login berbasis cookie bertanda tangan (HMAC-SHA256).
@@ -70,7 +70,7 @@ export async function getSessionUser(req: Request): Promise<SessionUser | null> 
   const token = extractSessionToken(req);
   const userId = verifySessionToken(token);
   if (!userId) return null;
-  const user = await db.user.findUnique({ where: { id: userId } });
+  const user = await store.users.byId(userId);
   if (!user || user.status !== "aktif") return null;
   return {
     id: user.id,

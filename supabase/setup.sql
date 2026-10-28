@@ -1,0 +1,254 @@
+-- ================================================================
+-- TANI LOA LEPU — PERSIAPAN BASIS DATA (Sekali Jalankan)
+-- ================================================================
+-- Cara pakai:
+--   1. Buka panel layanan basis data Anda → menu "SQL Editor"
+--   2. Tempel SELURUH isi berkas ini, lalu klik "Run"
+--   3. Selesai! Tabel + kebijakan akses + data awal (akun demo,
+--      katalog tanaman, produk pasar) langsung terisi.
+--
+-- Berkas ini AMAN dijalankan berulang (idempoten): data lama Anda
+-- tidak akan ditimpa atau dihapus.
+-- ================================================================
+
+-- ===== TABEL: PENGGUNA (petani | operator | superadmin) =====
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  username text unique not null,
+  password text not null, -- dikelola platform; operator dapat melihat utk bantu pemulihan akun
+  name text not null,
+  role text not null default 'petani'
+    check (role in ('petani','operator','superadmin')),
+  status text not null default 'menunggu'
+    check (status in ('menunggu','aktif','ditolak')),
+  phone text default '',
+  address text default '',
+  avatar_url text default '',
+  created_at timestamptz not null default now(),
+  approved_at timestamptz
+);
+
+create index if not exists idx_accounts_status on public.accounts(status, created_at desc);
+
+-- ===== TABEL: LAHAN (Kelola Lahan) =====
+create table if not exists public.lands (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references public.accounts(id) on delete set null,
+  name text not null,
+  location text not null,
+  area double precision not null check (area > 0),
+  area_unit text not null default 'm2',
+  soil_type text not null default 'tanah-merah',
+  status text not null default 'persiapan'
+    check (status in ('persiapan','tanam','perawatan','panen','pasca')),
+  planned_crop text default '',
+  image_url text default '',
+  notes text default '',
+  completed_steps text not null default '[]',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.activities (
+  id uuid primary key default gen_random_uuid(),
+  land_id uuid not null references public.lands(id) on delete cascade,
+  title text not null,
+  note text default '',
+  date timestamptz not null default now()
+);
+
+create index if not exists idx_activities_land on public.activities(land_id, date desc);
+
+-- ===== TABEL: TANAMAN (Kenali & Rawat) =====
+create table if not exists public.crops (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text not null,
+  latin_name text default '',
+  category text not null,
+  difficulty text not null default 'sedang'
+    check (difficulty in ('mudah','sedang','sulit')),
+  harvest_days integer not null default 90,
+  water_need text default 'sedang',
+  sun_need text default 'terang',
+  season text default 'Sepanjang tahun',
+  description text default '',
+  image_url text default '',
+  gallery text not null default '[]',
+  planting_steps text not null default '[]',
+  care_tips text not null default '[]',
+  diseases text not null default '[]',
+  price_range text default ''
+);
+
+-- ===== TABEL: PRODUK (Pasar Tani) =====
+create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references public.accounts(id) on delete set null,
+  name text not null,
+  category text not null default 'sayuran',
+  price double precision not null check (price > 0),
+  unit text not null default 'kg',
+  stock integer not null default 0 check (stock >= 0),
+  description text default '',
+  image_url text default '',
+  gallery text not null default '[]',
+  farmer_name text not null,
+  location text not null,
+  rating double precision not null default 4.8,
+  sold integer not null default 0,
+  is_organic boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- ===== TABEL: PESANAN (checkout Pasar Tani) =====
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references public.products(id),
+  product_name text not null,
+  customer_name text not null,
+  phone text not null,
+  address text not null,
+  quantity integer not null check (quantity > 0),
+  total double precision not null,
+  status text not null default 'baru'
+    check (status in ('baru','diproses','dikirim','selesai')),
+  created_at timestamptz not null default now()
+);
+
+-- ================================================================
+-- KEAMANAN BARIS (RLS)
+-- Seluruh akses data melewati server aplikasi (API routes) yang
+-- menegakkan peran petani/operator/superadmin. Kebijakan di bawah
+-- memberi akses penuh kepada kunci layanan yang dipakai server.
+-- ================================================================
+alter table public.accounts   enable row level security;
+alter table public.lands      enable row level security;
+alter table public.activities enable row level security;
+alter table public.crops      enable row level security;
+alter table public.products   enable row level security;
+alter table public.orders     enable row level security;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['accounts','lands','activities','crops','products','orders'] loop
+    execute format('drop policy if exists "platform_access" on public.%I', t);
+    execute format(
+      'create policy "platform_access" on public.%I for all to anon, authenticated using (true) with check (true)', t);
+  end loop;
+end $$;
+
+-- Update otomatis kolom updated_at pada lahan
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+
+drop trigger if exists trg_lands_touch on public.lands;
+create trigger trg_lands_touch
+  before update on public.lands
+  for each row execute function public.touch_updated_at();
+
+-- ================================================================
+-- DATA AWAL (idempoten — tidak menimpa data yang sudah ada)
+-- ================================================================
+
+-- ===== AKUN DEMO =====
+-- superadmin / super123      → Admin Desa (akses penuh)
+-- operator   / operator123   → Operator Desa (setujui akun, lihat kredensial petani)
+-- petani01   / petani123     → Petani aktif (contoh data)
+-- petani02   / petani456     → Petani menunggu persetujuan
+insert into public.accounts (username, password, name, role, status, phone, address, approved_at) values
+  ('superadmin', 'super123',    'Admin Desa Loa Lepu',   'superadmin', 'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
+  ('operator',   'operator123', 'Operator Desa Loa Lepu','operator',   'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
+  ('petani01',   'petani123',   'Bpk. Sutrisno',         'petani',     'aktif',   '0812-3456-7890','Dusun Loa Lepu Ulu',                 now()),
+  ('petani02',   'petani456',   'Ibu Mariati',           'petani',     'menunggu','0853-9876-5432','Dusun Loa Lepu Ilir',                null)
+on conflict (username) do nothing;
+
+-- ===== KATALOG TANAMAN =====
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('padi', 'Padi', 'Oryza sativa', 'padi-padian', 'sedang', 120, 'banyak', 'terang penuh', 'Musim hujan (Nov–Mar) & kemarau (dengan irigasi)', 'Padi adalah tanaman pangan utama masyarakat Indonesia yang ditanam di sawah atau ladang. Budidaya padi yang baik dimulai dari pemilihan benih unggul, pengolahan tanah yang sempurna, hingga pengairan teratur. Panen raya biasanya terjadi 110–130 hari setelah tanam dengan produktivitas 5–7 ton gabah per hektar untuk varietas unggul seperti Ciherang, IR64, atau Inpari 32.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/cbd8fa8b4aa2.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/04c0b9d8c114.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b831e66cf439.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7420d763deba.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d4f9727d1b0b.jpg"]', '["Siapkan persemaian: buat bedengan di tanah gembur, taburkan benih padi yang telah direndam 24–48 jam, tutup tipis dengan jerami selama 10–15 hari.","Olah tanah sawah: bajak tanah hingga gembur, ratakan, lalu genangi air setinggi 2–3 cm selama seminggu untuk melunakkan tanah.","Tanam bibit berumur 15–21 hari dengan jarak legowo 25×12,5 cm atau gunakan sistem jubin agar populasi optimal.","Jaga genangan air 3–5 cm selama fase vegetatif, kurangi air saat penggembungan, keringkan sawah sebelum panen 10 hari."]', '["Lakukan penyiangan gulma 2–3 minggu setelah tanam agar tanaman tidak bersaing nutrisi.","Berikan pupuk NPK seimbang: 50% pada saat tanam, 50% saat penggembungan awal.","Pantau hama wereng batang cokelat dan penggerek batang — gunakan perangkap lampu dan pestisida hayati bila populasi tinggi.","Keringkan sawah berkala (intermittent irrigation) untuk merangsang akar kuat dan menghemat air."]', '[{"name":"Blas (Pyricularia oryzae)","symptom":"Bercak kecil berbentuk belah ketupat berwarna cokelat pada daun.","treatment":"Semprotkan fungisida berbahan aktif trisiklazol dan kurangi pupuk nitrogen berlebih."},{"name":"Wereng Batang Cokelat","symptom":"Tanaman menguning dan mengering mulai dari bagian tengah, seperti terbakar (hopperburn).","treatment":"Gunakan varietas tahan hama, atur pola tanam serempak, semprotkan insektisida hayati."},{"name":"Tungau Tawar","symptom":"Daun menggulung, kaku, dan berwarna kekuningan seperti disiram air panas.","treatment":"Kendalikan inangnya (rumput liar), semprotkan akarisida yang direkomendasikan."}]', 'Rp 5.000 – 7.000 / kg gabah')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('jagung', 'Jagung', 'Zea mays', 'padi-padian', 'mudah', 100, 'sedang', 'terang penuh', 'Sepanjang tahun, terbaik awal musim hujan', 'Jagung merupakan komoditas pangan dan pakan ternak yang sangat penting dengan permintaan pasar terus meningkat. Tanaman ini relatif mudah dibudidayakan, tahan terhadap kondisi kering dibandingkan padi, dan cocok ditanam di lahan kering (ladang). Varietas unggul seperti Bisi-2, Pionir 29, atau NK 22 dapat menghasilkan 8–10 ton tongkol per hektar.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/9ec90db270a9.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/24bcfb2faa25.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/468ba41b3b67.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/887e35135247.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/1d55ab00900b.jpg"]', '["Olah tanah dengan bajak/cangkul hingga gembur, buat bedengan dan alur drainase agar tidak tergenang.","Taburkan 1–2 benih per lubang kedalaman 3–5 cm dengan jarak 70×20 cm, tutup dengan tanah halus.","Berikan pupuk kandang dasar 2–3 ton/ha sebelum tanam dan pupuk urea 10 hari setelah tanam.","Panen pada fase masak susu–masak penik (usia ± 100 hari) untuk jagung manis, atau saat kelobot mengering untuk jagung kering."]', '["Lakukan penyulaman bibit mati dalam seminggu setelah tanam agar populasi terjaga.","Penyiangan gulma 2 kali: usia 14 dan 30 hari setelah tanam.","Pemupukan susulan urea + KCl pada usia 30–35 hari saat tanaman setinggi lutut.","Bungkus tongkol dengan daunnya sendiri setelah serbuk sari selesai untuk mencegah serangan lalat buah."]', '[{"name":"Lalat Bibit (Atherigona)","symptom":"Bibit muda layu dan mati karena larva menggerogoti titik tumbuh.","treatment":"Perendaman benih dengan insektisida sistemik sebelum tanam."},{"name":"Penggerek Batang","symptom":"Batang berlubang, tongkol rusak, dan patah.","treatment":"Pasang perangkap feromon dan musnahkan sisa tanaman terinfeksi."},{"name":"Karat Daun","symptom":"Bercak seperti karat oranye pada permukaan daun.","treatment":"Semprotkan fungisida dan hindari kepadatan tanam terlalu tinggi."}]', 'Rp 4.500 – 6.000 / kg pipilan kering')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('cabai', 'Cabai Merah', 'Capsicum annuum', 'hortikultura', 'sulit', 75, 'sedang', 'terang penuh', 'Musim kemarau (April–Agustus) harga paling baik', 'Cabai merah adalah komoditas hortikultura dengan nilai ekonomi tertinggi dan volatilitas harga paling menarik bagi petani. Budidaya cabai menuntut perawatan intensif karena rentan hama dan penyakit, namun keuntungannya bisa mencapai 3–5 kali biaya produksi saat harga bagus. Varietas populer: L3 F1, Tanjung 2, dan Cabai Keriting Tawangmangu.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/34ce79d02bc2.jpeg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7813494f6037.webp","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/2ef097f85bfd.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/416a5f20be86.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/fa6ce751fc66.jpg"]', '["Semai benih di tray semai dengan media campuran tanah + kompos + sekam bakar, jaga kelembapan 20–25 hari.","Buat bedengan tinggi 30–40 cm dengan lebar 100–120 cm, beri mulsa plastik hitam perak untuk menekan gulma.","Tanam bibit sehat dengan jarak 50×60 cm, siram dengan larutan Trichoderma saat pindah tanam.","Pasang ajir/tutus dan ikat batang saat tanaman berumur 30 hari agar tidak roboh saat berbuah lebat."]', '["Siram 2 kali sehari pagi–sore pada musim kering, hindari genangan air di pangkal batang.","Pemupukan NPK susulan setiap 7–10 hari mulai usia 14 hari dengan dosis bertahap.","Pangkas cabang tua dan daun kering untuk sirkulasi udara serta mencegah penyakit jamur.","Gunakan perangkap kuning (yellow trap) untuk mengendalikan kutu daun dan thrips secara hayati."]', '[{"name":"Antraknosa","symptom":"Buah muncul bercak cekung cokelat gelap dengan titik oranye.","treatment":"Semprotkan fungisida berbahan aktif klorotalonil, gunakan varietas tahan."},{"name":"Layu Fusarium","symptom":"Daun menguning satu sisi, tanaman layu mendadak di siang hari.","treatment":"Aplikasi Trichoderma dan dorong drainase; cabut tanaman parah."},{"name":"Kutu Daun (Aphids)","symptom":"Daun muda keriting dan lengket karena serangga kecil berkoloni.","treatment":"Semprotkan sabun kalium atau insektisida hayati berbahan neem."}]', 'Rp 25.000 – 90.000 / kg (fluktuatif)')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('tomat', 'Tomat', 'Solanum lycopersicum', 'sayuran', 'sedang', 70, 'sedang', 'terang penuh', 'Sepanjang tahun, hindari puncak musim hujan', 'Tomat adalah sayuran populer dengan pasar luas mulai dari pasar tradisional, rumah makan, hingga industri pengolahan. Tanaman berumur pendek ini berpotensi panen pertama pada usia 60–70 hari dan bisa dipanen bertahap selama 3–4 minggu. Varietas unggul: Tomat Intan, Mutiara, dan para varietas hibrida yang tahan penyakit layu.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/96111896d258.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/1b6cf6c45b77.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/f489b75a9d6a.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ad0d51ef2ad4.jpg"]', '["Semai benih di bedengan persemaian, pindah ke polybag kecil setelah berdaun 2 helai, siap tanam pada usia 21–25 hari.","Olah bedengan seperti budidaya cabai, aplikasikan pupuk kandang matang 20 ton/ha.","Tanam dengan jarak 40×50 cm, segera siram dan pasang mulsa jerami/plastik.","Pasang tutus sejajar dan rajin simpul (pangkas sulur) agar nutrisi terkonsentrasi ke buah."]', '["Siram secara teratur namun tidak berlebihan; kelembapan tidak stabil membuat buah pecah.","Berikan pupuk tinggi kalium saat fase berbunga–berbuah untuk kualitas buah optimal.","Panen pada fase hijau kekuningan (breaker) untuk pasar jauh, merah penuh untuk pasar lokal.","Rotasi tanaman dengan keluarga berbeda (bukan terung/tembakau) untuk memutus siklus penyakit tanah."]', '[{"name":"Layu Bakteri","symptom":"Tanaman layu cepat tanpa menguning, batang bagian dalam kecokelatan.","treatment":"Sanitasi lahan, gunakan gambreng, aplikasi agens hayati Pseudomonas."},{"name":"Bercak Daun Septoria","symptom":"Bercak bulat kecil berbintik air di daun bawah yang menyebar ke atas.","treatment":"Fungisida sistemik dan buang daun sakit, hindari penyiraman dari atas."},{"name":"Ulat Buah (Heliothis)","symptom":"Buah berlubang dengan jejak kotoran larva di dalam.","treatment":"Rakit telur, semprotkan insektisida hayati Bacillus thuringiensis."}]', 'Rp 6.000 – 15.000 / kg')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('kangkung', 'Kangkung', 'Ipomoea reptans', 'sayuran', 'mudah', 25, 'banyak', 'terang', 'Sepanjang tahun', 'Kangkung adalah sayuran daun paling cepat panen — hanya 25–30 hari dari semai! Sangat cocok untuk petani pemula dan lahan kecil karena perawatannya sederhana dan permintaan pasar harian tinggi. Dapat dibudidayakan di tanah basah (sawah) atau kering (ladang/polybag) dengan sistem panen potong ulang hingga 3 kali.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png"]', '["Olah tanah ringan dengan cangkul, campurkan pupuk kandang matang, buat bedengan 100–120 cm.","Tabur benih secara seragam (broadcast) atau baris, tutup tipis dengan tanah/sekam.","Siram 1–2 kali sehari, jaga tanah selalu lembap hingga benih berkecambah 3–4 hari.","Panen pada usia 25–30 hari dengan memotong 2–3 ruas dari pangkal agar tumbuh kembali."]', '["Gunakan pupuk organik cair atau urea dosis rendah setiap 10 hari untuk daun lebat.","Tanam bertahap setiap minggu agar panen berkelanjutan dan pasokan stabil.","Awas ulat daun; gunakan perangkap oranye dan pestisida nabati bila diperlukan.","Panen pagi hari saat daun masih segar untuk kualitas jual terbaik."]', '[{"name":"Ulat Daun","symptom":"Daun berlubang-lubang dan ditemukan larva hijau.","treatment":"Rakit manual atau semprotkan Bt (Bacillus thuringiensis)."},{"name":"Busuk Akar","symptom":"Tanaman layu dan akar kehitaman saat tergenang terlalu lama.","treatment":"Perbaiki drainase, kurangi frekuensi siram, aplikasi Trichoderma."}]', 'Rp 3.000 – 6.000 / ikat')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('bawang-merah', 'Bawang Merah', 'Allium ascalonicum', 'hortikultura', 'sedang', 65, 'sedang', 'terang penuh', 'Musim kemarau (Mei–September)', 'Bawang merah adalah rempah dapur wajib dengan pasar yang tak pernah sepi. Komoditas ini paling optimal ditanam di musim kemarau dengan irigasi terkontrol, dan menjadi penyelamat ekonomi petani karena harga cenderung stabil hingga naik saat mendekati hari raya. Varietas unggul: Bauji, Tajuk, dan Bima Brebes.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/475261a01b5c.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ab10c8766b9d.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8cdfb5b920eb.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/475261a01b5c.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png"]', '["Pilih umbi bibit berukuran sedang (5–8 g) dari panen sehat, semai/pecah tunas 7–10 hari.","Buat bedengan 100–120 cm dengan guludan, aplikasikan pupuk kandang dan SP-36 dasar.","Tanam umbi dengan bagian tunas ke atas, jarak 15×20 cm, kedalaman 2/3 umbi terbenam.","Kurangi siram menjelang panen agar umbi matang fisiologis dan kulitnya tebal."]', '["Siram pagi–sore tipis saja di musim kering; bawang tidak suka tanah terlalu basah.","Pemupukan susulan urea + KCl pada usia 15 dan 30 hari setelah tanam.","Awas thrips (daun putih bergaris) — semprotkan insektisida hayati atau sabun kalium.","Panen saat 60–80% daun meroboh dan menguning; jemur 3–5 hari sebelum disimpan."]', '[{"name":"Thrips","symptom":"Garis-garis putih keperakan pada daun, pertumbuhan terhambat.","treatment":"Perangkap biru, insektisida nabati, dan rotasi tanaman."},{"name":"Busuk Umbi (Fusarium)","symptom":"Umbi membusuk dari dalam, daun menguning mendadak.","treatment":"Aplikasi Trichoderma sebelum tanam, hindari tanah tergenang."},{"name":"Bercak Ungu","symptom":"Bercak cokelat keunguan pada daun dengan lingkaran konsentris.","treatment":"Fungisida berbahan aktif difenokonazol, jaga sirkulasi udara."}]', 'Rp 25.000 – 45.000 / kg')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('singkong', 'Singkong', 'Manihot esculenta', 'umbi', 'mudah', 270, 'sedikit', 'terang penuh', 'Sepanjang tahun', 'Singkong (ubi kayu) adalah tanaman lahan kering yang paling tahan kering dan minim perawatan, ideal untuk lahan marginal. Selain dijual sebagai ubi segar, olahan seperti gaplek, tepung tapioka, dan keripik membuka peluang agroindustri. Varietas unggul seperti Adira 4 dan UJ-5 dapat menghasilkan 25–40 ton umbi per hektar.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/09448931a66e.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d47c32a4d85d.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0b27213e7ee0.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/09448931a66e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8191ebee9866.jpg"]', '["Pilih batang setek dari tanaman sehat berumur 8–12 bulan, potong 20–25 cm dengan 4–5 mata tunas.","Buat lubang/alur dengan jarak 80×80 cm pada tanah yang telah diolah gembur.","Tanam setek miring 45 derajat dengan 2 ruas terbenam dalam tanah.","Panen pada usia 8–12 bulan — cabut seluruh tanaman saat daun mulai rontok dan umbi penuh."]', '["Penyiangan gulma pada usia 1 dan 3 bulan; setelah tajuk menutup tanah, gulma teredam sendiri.","Tidak butuh pupuk banyak — cukup pupuk kandang di awal dan NPK rendah saat bulan ke-3.","Awas lalat pengorok daun dan tungau; semprotkan air sabun bila serangan ringan.","Panen segera setelah matang karena umbi dalam tanah mudah membusuk/bertunas kembali."]', '[{"name":"Lalat Pengorok Daun","symptom":"Garis putih berliku pada daun akibat larva menggerek.","treatment":"Buang daun sakit dan gunakan perangkap kuning."},{"name":"Busuk Akar","symptom":"Umbi membusuk berwarna cokelat kehitaman di tanah tergenang.","treatment":"Tanam di lahan berdrainase baik dan panen tepat waktu."}]', 'Rp 1.500 – 3.000 / kg')
+on conflict (slug) do nothing;
+
+insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
+values ('kedelai', 'Kedelai', 'Glycine max', 'palawija', 'sedang', 85, 'sedang', 'terang penuh', 'Musim kemarau setelah padi (Maret–Juli)', 'Kedelai adalah palawija strategis sebagai bahan baku tahu–tempe yang permintaannya sangat besar. Tanaman ini ideal untuk pola tanam padi–padi–kedelai karena mampu memperbaiki kesuburan tanah melalui pengikatan nitrogen. Varietas unggul: Anjasmoro, Dena 1, dan Grobogan yang berbiji besar.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/36cccf361def.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg"]', '["Olah tanah setelah panen padi — cukup bajak ringan dan ratakan, buat drainase.","Inokulasi benih dengan rizobium untuk meningkatkan pembentukan bintil akar.","Tanam benih 2–3 per lubang kedalaman 3–4 cm, jarak 40×10 cm.","Panen saat 90% polong menguning-kering dan daun gugur (usia 80–90 hari)."]', '["Penyiangan pada usia 2 dan 4 minggu setelah tanam.","Pemupukan fosfor (SP-36) saja biasanya cukup karena rizobium menyuplai nitrogen.","Awas kutu daun dan penghisap polong saat fase polong muda.","Keringkan hasil hingga kadar air 12–13% sebelum disimpan/dijual agar awet."]', '[{"name":"Kutu Daun (Aphids)","symptom":"Koloni serangga kecil hitam/hijau di pucuk muda.","treatment":"Semprotkan larutan sabun kalium atau insektisida hayati."},{"name":"Karat Daun","symptom":"Bintik karat kemerahan di kedua permukaan daun.","treatment":"Fungisida dan hindari tanam terlalu rapat."},{"name":"Ulat Grayak","symptom":"Larva bergerombol memakan daun hingga tinggal tulang saja.","treatment":"Rakit telurnya, semprotkan Bt atau virus NPV."}]', 'Rp 9.000 – 12.000 / kg')
+on conflict (slug) do nothing;
+
+-- ===== PRODUK PASAR (hanya diisi bila tabel masih kosong) =====
+insert into public.products (name, category, price, unit, stock, description, image_url, gallery, farmer_name, location, rating, sold, is_organic)
+select * from (values
+  ('Beras Merah Organik 5 kg', 'beras-palawija', 85000, 'karung 5 kg', 42, 'Beras merah organik hasil budidaya tanpa pupuk kimia, kaya serat dan rendah indeks glikemik. Digiling fresh setiap minggu sehingga aroma dan gizinya terjaga. Cocok untuk pola hidup sehat keluarga.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/66d16b8a0ab4.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e85f546881ed.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/eeaf03cc4045.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/cbd8fa8b4aa2.jpg"]', 'Gapoktan Tani Loa Lepu', 'Desa Loa Lepu, Tenggarong Seberang', 4.9, 156, true),
+  ('Beras Putih Premium 10 kg', 'beras-palawija', 132000, 'karung 10 kg', 68, 'Beras putih pulen varietas unggul hasil panen terbaru. Bersih, bebas kutu, dan digiling dengan mesin higienis. Setiap pembelian mendukung langsung petani mitra desa.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/eeaf03cc4045.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/fee536709cc8.webp","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/04c0b9d8c114.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7420d763deba.jpeg"]', 'Gapoktan Harapan Jaya', 'Desa Loa Kulu, Tenggarong Seberang', 4.8, 312, false),
+  ('Tomat Segar Panen Harian', 'sayuran', 12000, 'kg', 85, 'Tomat merah segar dipetik pagi hari dan dikirim di hari yang sama. Cocok untuk konsumsi rumah tangga, warung makan, maupun jumlah besar (grosir). Ada garansi ganti untuk buah rusak.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bedf3788be6e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/96111896d258.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg"]', 'Bpk. Sutrisno', 'Desa Buana Pertiwi, Tenggarong Seberang', 4.7, 208, false),
+  ('Cabai Merah Keriting', 'sayuran', 45000, 'kg', 30, 'Cabai keriting kualitas ekspor dengan tingkat kepedasan mantap. Dipanen pada kematangan sempurna sehingga warna merah cerah dan tahan simpan 4–5 hari dalam kondisi normal.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/416a5f20be86.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/58d93424efc4.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/34ce79d02bc2.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/a5c14d7c3068.jpg"]', 'Bpk. Hardono', 'Desa Jambangan, Tenggarong Seberang', 4.8, 97, false),
+  ('Jagung Manis Pipil', 'beras-palawija', 9000, 'kg', 120, 'Jagung manis varietas bonanza, dipipil segar dan bersih siap dimasak atau diolah jagung susu. Manis, juicy, dan bebas obat cuci kimia.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/887e35135247.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/15438e5c3a47.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/9ec90db270a9.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bddc7b142463.jpg"]', 'Kelompok Tani Sido Makmur', 'Desa Handil Bhakti, Tenggarong Seberang', 4.6, 141, false),
+  ('Kangkung Hidroponik', 'sayuran', 5000, 'ikat', 200, 'Kangkung hidroponik ditanam tanpa tanah dan tanpa pestisida — daun lembut, segar lebih lama, dan aman langsung dicuci untuk konsumsi. Dipanen pagi, dikirim siang.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'GreenFarm Hidroponik', 'Desa Loa Ipuh, Tenggarong Seberang', 4.9, 425, true),
+  ('Paket Sayur Segar Hemat', 'sayuran', 60000, 'paket', 45, 'Isi 7–8 jenis sayuran harian (bayam, kangkung, wortel, tomat, cabai, bawang, kol, sawi) cukup untuk keluarga selama 3–4 hari. Isi bisa menyesuaikan panen terbaik hari itu.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'Kelompok Wanita Tani Ceria', 'Desa Kedasih, Tenggarong Seberang', 4.9, 289, true),
+  ('Pisang Cavendish Premium', 'buah', 22000, 'sisir ±1 kg', 60, 'Pisang cavendish grade ekspor: besar, manis, dan matang merata. Dipetik hijau lalu diproses perawatan pascapanen agar matang alami tanpa bahan karbit.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b0164709bffa.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/6e1f4d1de1d0.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0bfa78fac27a.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b0164709bffa.jpg"]', 'Kelompok Buah Sejahtera', 'Desa Ganesho, Tenggarong Seberang', 4.8, 176, false),
+  ('Mangga Harum Manis', 'buah', 28000, 'kg', 38, 'Mangga harum manis petik matang dari kebun petani mitra di Sebulu — aromanya kuat, dagingnya tebal dan bebas serat. Dipanen dengan rantai dingin sederhana agar kualitas terjaga sampai rumah Anda.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0f361e6c51ed.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/70dadea900b9.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e4a06e4795eb.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0f361e6c51ed.jpg"]', 'Bpk. Karim', 'Desa Sebulu, Kutai Kartanegara', 4.7, 112, false),
+  ('Telur Ayam Kampung', 'protein', 32000, 'kg', 55, 'Telur ayam kampung dari ayam umbaran bebas pakan pabrikan. Kuning telur pekat oranye, cocok untuk anak-anak dan ibu hamil. Dikemas dengan kardus anti benturan.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/112eb8e5928f.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ce4fbe0142b9.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e5d152abe20.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png"]', 'Peternakan Makmur Sejahtera', 'Desa Muara Jawa, Kutai Kartanegara', 4.8, 233, true),
+  ('Madu Hutan Murni 350 ml', 'olahan', 95000, 'botol', 25, 'Madu hutan murni hasil panen lestari dari pedalaman Mahakam, tanpa campuran gula. Diambil dari lebah hutan dengan kearifan lokal, kaya enzim alami dan aroma bunga hutan khas.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/02fbad5329de.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/4d152dd15e97.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/02fbad5329de.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/200c121de414.jpg"]', 'Kelompok Madu Lestari', 'Desa Muara Muntai, Kutai Kartanegara', 5, 64, true),
+  ('Bawang Merah Kualitas Pasar', 'sayuran', 30000, 'kg', 70, 'Bawang merah kering berkualitas dari kebun petani mitra di Kota Bangun, umbi padat dan tidak bertunas. Disortir ketat — 1 kg dijamin bersih tanpa umbi busuk.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ab10c8766b9d.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/475261a01b5c.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8cdfb5b920eb.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'Kelompok Tani Bawang Sejahtera', 'Desa Kota Bangun, Kutai Kartanegara', 4.6, 198, false)
+) as baru(name, category, price, unit, stock, description, image_url, gallery, farmer_name, location, rating, sold, is_organic)
+where not exists (select 1 from public.products);
+
+-- ===== LAHAN CONTOH (hanya bila tabel masih kosong) =====
+insert into public.lands (name, location, area, area_unit, soil_type, status, planned_crop, image_url, notes, completed_steps)
+select * from (values
+  ('Sawah Utama', 'Desa Loa Lepu, Tenggarong Seberang', 2500, 'm2', 'alluvial', 'tanam', 'Padi (Ciherang)', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d4f9727d1b0b.jpg', 'Irigasi teknis dari bendung, panen raya diperkirakan awal Maret.', '["lahan","olahan","benih","tanam"]'),
+  ('Kebun Sayur Rumah', 'Desa Loa Lepu, Tenggarong Seberang', 800, 'm2', 'andosol', 'perawatan', 'Cabai Merah (L3 F1)', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/035efeb31b24.jpeg', 'Mulsa plastik terpasang, pemupukan susulan tiap 10 hari.', '["lahan","olahan","benih","tanam","perawatan"]'),
+  ('Ladang Persiapan Baru', 'Desa Loa Duri Ilir, Tenggarong Seberang', 1500, 'm2', 'kapur (litosol)', 'persiapan', 'Jagung Manis', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg', 'Menunggu traktor untuk bajak perdana, jadwal tanam awal bulan depan.', '["lahan"]')
+) as baru(name, location, area, area_unit, soil_type, status, planned_crop, image_url, notes, completed_steps)
+where not exists (select 1 from public.lands);
+
+-- Catat aktivitas awal untuk setiap lahan yang belum punya catatan
+insert into public.activities (land_id, title, note)
+select l.id, 'Lahan didaftarkan ke platform', 'Lahan siap dikelola bersama Tani Loa Lepu.'
+from public.lands l
+where not exists (
+  select 1 from public.activities a where a.land_id = l.id and a.title = 'Lahan didaftarkan ke platform'
+);
+
+-- ===== KEPEMILIKAN DATA DEMO (bila belum ada pemiliknya) =====
+update public.lands
+set owner_id = (select id from public.accounts where username = 'petani01')
+where owner_id is null;
+
+update public.products
+set owner_id = (select id from public.accounts where username = 'petani01')
+where owner_id is null;
+
+-- ===== SELESAI =====
+select
+  'Setup Tani Loa Lepu selesai!' as status,
+  (select count(*) from public.accounts) as jumlah_akun,
+  (select count(*) from public.crops) as jumlah_tanaman,
+  (select count(*) from public.products) as jumlah_produk,
+  (select count(*) from public.lands) as jumlah_lahan;

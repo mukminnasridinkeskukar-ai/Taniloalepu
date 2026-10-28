@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // PATCH /api/users/[id]
@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const { id } = await ctx.params;
-  const target = await db.user.findUnique({ where: { id } });
+  const target = await store.users.byId(id);
   if (!target) {
     return NextResponse.json({ error: "Akun tidak ditemukan" }, { status: 404 });
   }
@@ -32,21 +32,21 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (target.status !== "menunggu" && status === "ditolak") {
         return NextResponse.json({ error: "Akun yang sudah aktif tidak dapat ditolak" }, { status: 400 });
       }
-      const updated = await db.user.update({
-        where: { id },
-        data: { status, approvedAt: status === "aktif" ? new Date() : target.approvedAt },
+      const updated = await store.users.update(id, {
+        status,
+        approvedAt: status === "aktif" ? new Date() : target.approvedAt,
       });
-      return NextResponse.json({ ok: true, status: updated.status });
+      return NextResponse.json({ ok: true, status: updated?.status ?? status });
     }
 
     if (session.role === "superadmin") {
-      const data: Record<string, string | Date | null> = {};
+      const data: Record<string, string | null> = {};
       if (typeof body.role === "string" && ["petani", "operator", "superadmin"].includes(body.role)) {
         data.role = body.role;
       }
       if (typeof body.status === "string" && ["aktif", "menunggu", "ditolak"].includes(body.status)) {
         data.status = body.status;
-        if (body.status === "aktif") data.approvedAt = new Date();
+        if (body.status === "aktif") data.approvedAt = new Date().toISOString();
       }
       if (typeof body.password === "string" && body.password.length > 0) {
         if (body.password.length < 6) {
@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (id === session.id && (data.status === "ditolak" || data.status === "menunggu" || (data.role && data.role !== "superadmin"))) {
         return NextResponse.json({ error: "Anda tidak dapat menurunkan atau menonaktifkan akun sendiri" }, { status: 400 });
       }
-      await db.user.update({ where: { id }, data });
+      await store.users.update(id, data);
       return NextResponse.json({ ok: true });
     }
 
@@ -86,7 +86,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     return NextResponse.json({ error: "Anda tidak dapat menghapus akun sendiri" }, { status: 400 });
   }
   try {
-    await db.user.delete({ where: { id } });
+    await store.users.remove(id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);

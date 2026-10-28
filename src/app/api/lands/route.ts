@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // GET /api/lands — petani: lahan milik sendiri; operator & admin desa: semua lahan.
@@ -11,12 +11,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const where = session.role === "petani" ? { ownerId: session.id } : {};
-    const lands = await db.land.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: { activities: { orderBy: { date: "desc" }, take: 20 } },
-    });
+    const lands = await store.lands.list(session.role === "petani" ? { ownerId: session.id } : undefined);
     return NextResponse.json(lands);
   } catch (err) {
     console.error(err);
@@ -45,27 +40,23 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const land = await db.land.create({
-      data: {
-        ownerId: session.id,
-        name,
-        location,
-        area,
-        areaUnit: body.areaUnit === "ha" ? "ha" : "m2",
-        soilType: String(body.soilType ?? "tanah-merah"),
-        status: String(body.status ?? "persiapan"),
-        plannedCrop: String(body.plannedCrop ?? ""),
-        imageUrl: String(body.imageUrl ?? ""),
-        notes: String(body.notes ?? ""),
-        completedSteps: "[]",
-      },
+    const land = await store.lands.create({
+      ownerId: session.id,
+      name,
+      location,
+      area,
+      areaUnit: body.areaUnit === "ha" ? "ha" : "m2",
+      soilType: String(body.soilType ?? "tanah-merah"),
+      status: String(body.status ?? "persiapan"),
+      plannedCrop: String(body.plannedCrop ?? ""),
+      imageUrl: String(body.imageUrl ?? ""),
+      notes: String(body.notes ?? ""),
+      completedSteps: "[]",
     });
-    await db.activity.create({
-      data: {
-        landId: land.id,
-        title: "Lahan didaftarkan ke platform",
-        note: `${land.name} (${land.area} ${land.areaUnit}) siap dikelola.`,
-      },
+    await store.activities.create({
+      landId: land.id,
+      title: "Lahan didaftarkan ke platform",
+      note: `${land.name} (${land.area} ${land.areaUnit}) siap dikelola.`,
     });
     return NextResponse.json(land, { status: 201 });
   } catch (err) {

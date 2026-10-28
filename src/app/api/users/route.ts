@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // GET /api/users — operator: daftar akun petani (+ kredensial utk bantu pemulihan);
@@ -13,27 +13,42 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Hanya operator atau admin desa yang dapat melihat daftar akun" }, { status: 403 });
   }
 
-  const where = session.role === "operator" ? { role: "petani" } : {};
-  const users = await db.user.findMany({
-    where,
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      username: true,
-      password: true,
-      name: true,
-      role: true,
-      status: true,
-      phone: true,
-      address: true,
-      avatarUrl: true,
-      createdAt: true,
-      approvedAt: true,
-      _count: { select: { lands: true, products: true } },
-    },
-  });
+  try {
+    const users = await store.users.list(session.role === "operator" ? { role: "petani" } : undefined);
+    users.sort(
+      (a, b) => a.status.localeCompare(b.status) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "")
+    );
 
-  return NextResponse.json(users);
+    // hitung jumlah lahan & produk per pemilik (menggantikan _count Prisma)
+    const [lands, products] = await Promise.all([store.lands.list(), store.products.list()]);
+    const counts: Record<string, { lands: number; products: number }> = {};
+    for (const l of lands) {
+      if (l.ownerId) (counts[l.ownerId] ??= { lands: 0, products: 0 }).lands++;
+    }
+    for (const p of products) {
+      if (p.ownerId) (counts[p.ownerId] ??= { lands: 0, products: 0 }).products++;
+    }
+
+    return NextResponse.json(
+      users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        password: u.password,
+        name: u.name,
+        role: u.role,
+        status: u.status,
+        phone: u.phone,
+        address: u.address,
+        avatarUrl: u.avatarUrl,
+        createdAt: u.createdAt,
+        approvedAt: u.approvedAt,
+        _count: { lands: counts[u.id]?.lands ?? 0, products: counts[u.id]?.products ?? 0 },
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Gagal memuat daftar akun" }, { status: 500 });
+  }
 }
 
 // POST /api/users — superadmin membuat akun baru (petani/operator/superadmin)
@@ -64,22 +79,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nama lengkap wajib diisi" }, { status: 400 });
     }
 
-    const existing = await db.user.findUnique({ where: { username } });
+    const existing = await store.users.byUsername(username);
     if (existing) {
       return NextResponse.json({ error: "Nama pengguna sudah digunakan" }, { status: 409 });
     }
 
-    const user = await db.user.create({
-      data: {
-        username,
-        password,
-        name,
-        role,
-        status,
-        phone: String(body.phone ?? "").trim().slice(0, 30),
-        address: String(body.address ?? "").trim().slice(0, 200),
-        approvedAt: status === "aktif" ? new Date() : null,
-      },
+    const user = await store.users.create({
+      username,
+      password,
+      name,
+      role,
+      status,
+      phone: String(body.phone ?? "").trim().slice(0, 30),
+      address: String(body.address ?? "").trim().slice(0, 200),
+      approvedAt: status === "aktif" ? new Date() : null,
     });
     return NextResponse.json({ ok: true, id: user.id }, { status: 201 });
   } catch (err) {

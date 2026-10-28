@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 const ALLOWED_STATUS = ["persiapan", "tanam", "perawatan", "panen", "pasca"];
@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const { id } = await ctx.params;
     const body = await req.json();
-    const existing = await db.land.findUnique({ where: { id } });
+    const existing = await store.lands.byId(id);
     if (!existing) {
       return NextResponse.json({ error: "Lahan tidak ditemukan" }, { status: 404 });
     }
@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (body.notes !== undefined) data.notes = String(body.notes).slice(0, 500);
     if (body.plannedCrop !== undefined) data.plannedCrop = String(body.plannedCrop).slice(0, 100);
 
-    const land = await db.land.update({ where: { id }, data });
+    const land = await store.lands.update(id, data);
 
     // catat aktivitas otomatis
     let actTitle = "";
@@ -58,8 +58,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       actTitle = "Catatan lahan diperbarui";
     }
     if (actTitle) {
-      await db.activity.create({
-        data: { landId: id, title: actTitle, note: String(body.activityNote ?? "") },
+      await store.activities.create({
+        landId: id,
+        title: actTitle,
+        note: String(body.activityNote ?? ""),
       });
     }
 
@@ -82,14 +84,14 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
   try {
     const { id } = await ctx.params;
-    const existing = await db.land.findUnique({ where: { id } });
+    const existing = await store.lands.byId(id);
     if (!existing) {
       return NextResponse.json({ error: "Lahan tidak ditemukan" }, { status: 404 });
     }
     if (session.role !== "superadmin" && existing.ownerId !== session.id) {
       return NextResponse.json({ error: "Anda hanya dapat menghapus lahan milik sendiri" }, { status: 403 });
     }
-    await db.land.delete({ where: { id } });
+    await store.lands.remove(id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);

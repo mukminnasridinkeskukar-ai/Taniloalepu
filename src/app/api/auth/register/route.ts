@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 
 // POST /api/auth/register — pengajuan akun petani baru (menunggu persetujuan operator)
@@ -25,21 +25,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nama lengkap wajib diisi" }, { status: 400 });
     }
 
-    const existing = await db.user.findUnique({ where: { username } });
+    const existing = await store.users.byUsername(username);
     if (existing) {
       return NextResponse.json({ error: "Nama pengguna sudah digunakan, pilih yang lain" }, { status: 409 });
     }
 
-    const user = await db.user.create({
-      data: {
-        username,
-        password,
-        name,
-        phone,
-        address,
-        role: "petani",
-        status: "menunggu",
-      },
+    const user = await store.users.create({
+      username,
+      password,
+      name,
+      phone,
+      address,
+      role: "petani",
+      status: "menunggu",
     });
 
     return NextResponse.json(
@@ -51,6 +49,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Gagal mengirim pengajuan akun" }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error && err.name === "DbError" ? `${(err as Error).message} ${(err as { hint?: string }).hint ?? ""}`.trim() : "Gagal mengirim pengajuan akun" },
+      { status: 500 }
+    );
   }
 }

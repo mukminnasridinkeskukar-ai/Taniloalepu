@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 import { getSessionUser } from "@/lib/auth";
 
 // GET /api/orders — petani: pesanan utk produk miliknya; admin desa: semua pesanan.
@@ -13,15 +13,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const where =
-      session.role === "superadmin"
-        ? {}
-        : { product: { ownerId: session.id } };
-    const orders = await db.order.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    if (session.role === "superadmin") {
+      const orders = await store.orders.list();
+      return NextResponse.json(orders);
+    }
+    // petani: pesanan atas produk miliknya
+    const myProducts = await store.products.list({ ownerId: session.id });
+    const orders = await store.orders.list({ productIds: myProducts.map((p) => p.id) });
     return NextResponse.json(orders);
   } catch (err) {
     console.error(err);
@@ -46,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const product = await db.product.findUnique({ where: { id: productId } });
+    const product = await store.products.byId(productId);
     if (!product) {
       return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 404 });
     }
@@ -57,24 +55,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const total = product.price * quantity;
-    const [order] = await Promise.all([
-      db.order.create({
-        data: {
-          productId,
-          productName: product.name,
-          customerName,
-          phone,
-          address,
-          quantity,
-          total,
-        },
-      }),
-      db.product.update({
-        where: { id: productId },
-        data: { stock: { decrement: quantity }, sold: { increment: quantity } },
-      }),
-    ]);
+    // kurangi stok dengan penjaga konkurensi (stok lama harus cocok)
+    const ok = await store.products.adjustStock(productId, product.stock, {
+      stock: product.stock - quantity,
+      sold: product.sold + quantity,
+    });
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Stok baru saja berubah. Muat ulang halaman lalu coba lagi." },
+        { status: 409 }
+      );
+    }
+
+    const order = await store.orders.create({
+      productId,
+      productName: product.name,
+      customerName,
+      phone,
+      address,
+      quantity,
+      total: product.price * quantity,
+    });
 
     return NextResponse.json(
       {

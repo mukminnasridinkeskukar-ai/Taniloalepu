@@ -40,6 +40,22 @@ Input data lahan/produk hanya bisa dilakukan setelah masuk dengan akun aktif.
 > sesuai kebutuhan pemulihan akun tingkat desa. Untuk penerapan skala besar,
 > disarankan mengganti dengan penyimpanan kata sandi teracak (hash) satu arah.
 
+## Cara Kerja Basis Data (Penting!)
+
+Platform ini **tidak lagi memakai berkas database lokal**. Seluruh data (akun, lahan,
+tanaman, produk, pesanan) tersimpan di layanan basis data PostgreSQL awan (Supabase)
+dan diakses lewat **REST API over HTTPS** oleh server aplikasi.
+
+Keuntungan pendekatan ini:
+
+- **Satu sumber data** untuk komputer lokal maupun deployment Vercel — tidak ada
+  perbedaan perilaku "jalan di lokal, gagal di deployment".
+- **Kompatibel penuh dengan lingkungan tanpa-servur** (Vercel): tidak ada berkas
+  database, tidak ada mesin Prisma, tidak ada koneksi TCP khusus.
+- **Tanpa konfigurasi**: alamat & kunci layanan sudah tertanam di
+  `src/lib/supabase.ts` (boleh ditimpa lewat variabel `SUPABASE_URL` /
+  `SUPABASE_ANON_KEY` bila suatu saat ganti proyek basis data).
+
 ## Menjalankan Secara Lokal
 
 Prasyarat: Node.js 18+ (atau Bun) sudah terpasang.
@@ -48,15 +64,12 @@ Prasyarat: Node.js 18+ (atau Bun) sudah terpasang.
 # 1. Pasang dependensi
 npm install          # atau: bun install
 
-# 2. Sinkronkan skema basis data demo (file SQLite di folder db/)
-npx prisma db push   # atau: bun run db:push
-
-# 3. Jalankan mode pengembangan
+# 2. Jalankan mode pengembangan
 npm run dev          # atau: bun run dev
 ```
 
-Buka `http://localhost:3000` di peramban. Data contoh (8 tanaman, 12 produk,
-3 lahan) dan akun demo sudah tersedia sehingga aplikasi langsung bisa dicoba.
+Buka `http://localhost:3000` di peramban. Seluruh data diambil dari basis data
+awan yang sama dengan deployment produksi — akun demo & data contoh sudah tersedia.
 
 ## Build Produksi
 
@@ -73,50 +86,43 @@ src/
 │   ├── page.tsx          # Aplikasi utama (9 tampilan: beranda, lahan, siapkan,
 │   │                     #   tanaman, pasar, masuk, daftar, akun, panel)
 │   └── api/              # auth (register/login/logout/me/profile), users,
-│                         #   lands, crops, products, orders, assistant
+│                         #   lands, crops, products, orders, assistant, health
 ├── components/
 │   ├── agri/             # Komponen fitur (header, footer, home, lahan, tanaman,
 │   │                     #   pasar, asisten, auth, profil, panel operator/admin)
 │   └── ui/               # Komponen antarmuka dasar
-├── lib/                  # Tipe data, konten statis, sesi login, manifest gambar
-prisma/schema.prisma      # Skema demo lokal (SQLite) — dipakai otomatis jika DATABASE_URL bukan postgres
-prisma/schema.postgres.prisma  # Skema produksi (PostgreSQL) — dipetakan ke tabel supabase/
-scripts/prisma-setup.mjs  # Pemilih skema otomatis (postinstall & build)
-supabase/                 # SQL siap pakai untuk basis data produksi (PostgreSQL)
-db/custom.db              # Basis data demo (SQLite)
+├── lib/
+│   ├── supabase.ts       # Klien REST basis data awan (PostgREST) + pesan galat Indonesia
+│   ├── store.ts          # Lapisan data domain (akun, lahan, tanaman, produk, pesanan)
+│   ├── auth.ts           # Sesi login (cookie bertanda tangan HMAC + Bearer token)
+│   └── auth-client.ts    # Penyimpan token cadangan + intersep fetch sisi klien
+supabase/
+└── setup.sql             # SQL sekali-jalankan: tabel + keamanan baris + data awal
 ```
 
-## Deployment Produksi (Vercel + Basis Data PostgreSQL)
+## Deployment Produksi (GitHub + Vercel + Supabase)
 
-Platform ini dirancang untuk di-deploy sebagai situs tanpa-servur (mis. Vercel)
-dengan basis data PostgreSQL terkelola (mis. Supabase). Ikuti urutan berikut
-agar proses masuk (login) berfungsi di deployment:
+### Langkah 1 — Siapkan basis data (SEKALI SAJA, wajib)
 
-### Langkah 1 — Siapkan basis data
+1. Buka panel proyek basis data Anda (Supabase) → menu **SQL Editor** → **New query**.
+2. Salin **seluruh isi** berkas `supabase/setup.sql`, tempel, lalu klik **Run**.
+3. Selesai. Hasilnya: 6 tabel + kebijakan akses + data awal (4 akun demo,
+   8 tanaman, 12 produk, 3 lahan contoh). Skrip ini aman dijalankan ulang —
+   data yang sudah ada tidak akan ditimpa.
 
-1. Buat proyek pada layanan basis data PostgreSQL (mis. Supabase).
-2. Buka **SQL Editor**, lalu jalankan berurutan:
-   1. `supabase/reset.sql` — hanya jika pernah memasang skema versi lama;
-   2. `supabase/schema.sql` — membuat 6 tabel + keamanan baris (RLS);
-   3. `supabase/seed.sql` — mengisi akun demo, 8 tanaman, dan produk contoh.
+> ⚠️ **Penyebab paling umum gagal masuk (login) di deployment:** langkah 1 dilewati,
+> atau tabel dibuat dengan skema versi lama yang mengunci tabel `accounts`.
+> Jalankan `setup.sql` terbaru — kebijakan aksesnya akan diperbarui otomatis.
 
-### Langkah 2 — Atur variabel lingkungan di panel deployment
+### Langkah 2 — Deploy ke Vercel
 
-| Variabel | Nilai | Catatan |
-|----------|-------|---------|
-| `DATABASE_URL` | alamat koneksi **Transaction pooler** | Diawali `postgresql://` (bukan `file:`), tambahkan `?pgbouncer=true&connection_limit=1` di akhir. |
-| `SESSION_SECRET` | teks acak panjang | Bebas, contoh: kalimat acak 40+ karakter. |
+1. Dorong (push) seluruh kode proyek ini ke repositori GitHub Anda.
+2. Di Vercel: **Add New → Project → Import** repositorinya → **Deploy**.
+3. **Tidak perlu mengisi environment variable apa pun** — kredensial basis data
+   sudah tertanam. (Opsional: isi `SESSION_SECRET` dengan teks acak panjang milik
+   Anda agar sesi login lebih aman & stabil antar deployment.)
 
-> ⚠️ Penyebab paling umum **gagal masuk (error 500) di deployment**:
-> 1. `DATABASE_URL` belum diisi / masih memakai `file:...` (berkas lokal tidak tersedia di deployment).
-> 2. Tabel belum dibuat (langkah 1 dilewati).
-> 3. Skema lama masih memakai tipe kolom `jsonb`/`numeric` — jalankan `reset.sql` lalu `schema.sql` terbaru.
-
-Skrip `postinstall`/`build` otomatis memilih skema Prisma yang tepat:
-`DATABASE_URL` berawalan `postgres` → `prisma/schema.postgres.prisma` (PostgreSQL);
-selain itu → `prisma/schema.prisma` (SQLite untuk demo lokal).
-
-### Langkah 3 — Deploy, lalu periksa kesehatan lingkungan
+### Langkah 3 — Periksa kesehatan deployment
 
 Setelah deployment selesai, buka:
 
@@ -126,34 +132,22 @@ https://alamat-situs-anda/api/health
 
 Endpoint ini menampilkan status basis data **tanpa mengekspos rahasia**:
 
-- `"status": "tersambung"` → semuanya siap; silakan masuk dengan akun demo.
-- `"status": "gagal"` → ikuti kolom `saran` (pesan dalam bahasa Indonesia,
-  mis. tabel belum dibuat / alamat koneksi salah / pooler belum dipakai).
+- `"status": "tersambung"` + `pengguna` lebih dari 0 → semuanya siap; silakan masuk
+  dengan akun demo.
+- `pengguna: 0` meski `tanaman`/`produk` terisi → kebijakan akses lama masih aktif;
+  jalankan ulang `supabase/setup.sql` (Langkah 1).
+- `"status": "gagal"` → ikuti kolom `saran` (pesan berbahasa Indonesia).
 
 ### Pemecahan Masalah Cepat
 
 | Gejala | Penyebab | Solusi |
 |--------|----------|--------|
-| Login → error 500 | `DATABASE_URL` belum diatur | Isi variabel lingkungan, deploy ulang |
-| Login → error 500, health: "tabel belum dibuat" | `schema.sql` belum dijalankan | Jalankan `schema.sql` + `seed.sql` di SQL Editor |
-| Health: "struktur tabel belum sesuai" | Tabel lama (tipe `jsonb`/`numeric`) | Jalankan `reset.sql` → `schema.sql` → `seed.sql` |
-| Health: "tidak dapat menghubungi server" | Proyek DB terjeda / salah alamat / bukan pooler | Aktifkan proyek, pakai Transaction pooler + parameter `pgbouncer` |
-| Masuk berhasil lalu lepas saat berpindah halaman | `SESSION_SECRET` berubah antar deployment | Pastikan `SESSION_SECRET` sama & permanen di panel deployment |
-| Unggah foto profil gagal di deployment | Ukuran foto > 700 KB setelah dimampatkan | Gunakan foto yang lebih kecil (otomatis dimampatkan ke 256×256) |
-
-## Basis Data Produksi
-
-Folder `supabase/` berisi berkas siap pakai untuk basis data PostgreSQL produksi:
-
-- `schema.sql` — 6 tabel (accounts, lands, activities, crops, products, orders)
-  dengan tipe kolom yang **sudah diselaraskan** dengan `prisma/schema.postgres.prisma`
-  (teks untuk larik JSON, `double precision` untuk angka desimal), keamanan baris
-  (RLS), dan pemicu `updated_at`.
-- `seed.sql` — data awal: akun demo multi-user, 8 tanaman lengkap, produk contoh.
-- `reset.sql` — membersihkan struktur versi lama sebelum pemasangan ulang.
-
-Skema Prisma produksi (`prisma/schema.postgres.prisma`) memetakan model aplikasi
-ke tabel tersebut (`@@map`/`@map`), sehingga aplikasi, SQL, dan data awal selalu konsisten.
+| Katalog tampil, tapi login selalu "salah" | Tabel `accounts` terkunci kebijakan lama | Jalankan `supabase/setup.sql` di SQL Editor |
+| Error 500 di semua halaman | Tabel belum dibuat di basis data | Jalankan `supabase/setup.sql` di SQL Editor |
+| Health: "tidak dapat menghubungi layanan" | Proyek basis data terjeda/terhenti | Aktifkan proyek di panel basis data |
+| Masuk berhasil lalu lepas antar kunjungan | `SESSION_SECRET` berubah antar deployment | Set `SESSION_SECRET` permanen di Vercel |
+| Unggah foto profil gagal | Foto > 700 KB setelah dimampatkan | Gunakan foto lebih kecil (otomatis dimampatkan 256×256) |
+| Cek status data | — | Buka `/api/health` kapan saja |
 
 ---
 

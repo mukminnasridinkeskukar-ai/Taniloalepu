@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { store } from "@/lib/store";
 
 // GET /api/crops?q=&category= — ensiklopedia tanaman
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+    const q = (searchParams.get("q") ?? "").trim();
     const category = searchParams.get("category") ?? "";
 
-    const where: Record<string, unknown> = {};
-    if (category && category !== "semua") where.category = category;
-    if (q) {
-      where.OR = [
-        { name: { contains: q } },
-        { latinName: { contains: q } },
-        { description: { contains: q } },
-      ];
-    }
-
-    const crops = await db.crop.findMany({ where, orderBy: { name: "asc" } });
+    const crops = await store.crops.list({ q, category });
     return NextResponse.json(crops);
   } catch (err) {
     console.error(err);
