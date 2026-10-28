@@ -13,7 +13,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nama pengguna dan kata sandi wajib diisi" }, { status: 400 });
     }
 
-    const user = await db.user.findUnique({ where: { username } });
+    let user = await db.user.findUnique({ where: { username } });
+    // Toleransi: izinkan masuk dengan nama lengkap bila nama pengguna tidak ditemukan
+    // (pencocokan manual karena SQLite tidak mendukung mode: "insensitive")
+    const rawInput = String(body.username ?? "").trim();
+    if (!user && rawInput) {
+      const matches = (await db.user.findMany()).filter(
+        (u) => u.name.toLowerCase() === rawInput.toLowerCase()
+      );
+      if (matches.length === 1) user = matches[0];
+    }
     if (!user || user.password !== password) {
       return NextResponse.json({ error: "Nama pengguna atau kata sandi salah" }, { status: 401 });
     }
@@ -33,6 +42,7 @@ export async function POST(req: NextRequest) {
 
     const res = NextResponse.json({
       ok: true,
+      token: createSessionToken(user.id),
       user: {
         id: user.id,
         username: user.username,
@@ -44,7 +54,7 @@ export async function POST(req: NextRequest) {
         avatarUrl: user.avatarUrl,
       },
     });
-    res.cookies.set(SESSION_COOKIE, createSessionToken(user.id), sessionCookieOptions());
+    res.cookies.set(SESSION_COOKIE, createSessionToken(user.id), sessionCookieOptions(req));
     return res;
   } catch (err) {
     console.error(err);

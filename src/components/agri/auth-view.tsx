@@ -6,8 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogIn, UserPlus, Leaf, ShieldCheck, Clock, CheckCircle2 } from "lucide-react";
+import { Loader2, LogIn, UserPlus, Leaf, ShieldCheck, Clock, CheckCircle2, Wand2 } from "lucide-react";
 import { HERO_IMAGES } from "@/lib/agri-content";
+import { saveToken } from "@/lib/auth-client";
 import type { AuthUser } from "@/lib/agri-types";
 
 type Mode = "masuk" | "daftar";
@@ -56,6 +57,7 @@ export function AuthView({
         return;
       }
       if (mode === "masuk") {
+        if (data.token) saveToken(data.token);
         onLoginSuccess(data.user as AuthUser);
       } else {
         setRegistered(true);
@@ -265,6 +267,35 @@ export function AuthView({
               </>
             )}
           </div>
+
+          {isLogin && (
+            <div className="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Isi cepat — akun uji coba
+              </p>
+              <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
+                {[
+                  { label: "Petani", username: "petani01", password: "petani123" },
+                  { label: "Operator", username: "operator", password: "operator123" },
+                  { label: "Admin Desa", username: "superadmin", password: "super123" },
+                ].map((d) => (
+                  <button
+                    key={d.username}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, username: d.username, password: d.password }))}
+                    className="rounded-lg border border-border/70 bg-background px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
+                  >
+                    <span className="block text-sm font-semibold">{d.label}</span>
+                    <span className="block text-xs text-muted-foreground">{d.username}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Ketuk salah satu untuk mengisi otomatis, lalu tekan Masuk.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </section>

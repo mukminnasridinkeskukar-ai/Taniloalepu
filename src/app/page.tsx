@@ -13,7 +13,10 @@ import { AuthView } from "@/components/agri/auth-view";
 import { ProfileView } from "@/components/agri/profile-view";
 import { PanelView } from "@/components/agri/panel-view";
 import { useToast } from "@/hooks/use-toast";
+import { installAuthFetch, clearToken } from "@/lib/auth-client";
 import type { AuthUser } from "@/lib/agri-types";
+
+if (typeof window !== "undefined") installAuthFetch();
 
 const VALID_VIEWS: ViewKey[] = [
   "beranda", "lahan", "siapkan", "tanaman", "pasar", "masuk", "daftar", "akun", "panel",
@@ -87,6 +90,7 @@ export default function Home() {
     } catch {
       /* abaikan */
     }
+    clearToken();
     setUser(null);
     toast({ title: "Anda telah keluar dari akun" });
     navigate("beranda");

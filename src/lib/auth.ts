@@ -49,14 +49,25 @@ export type SessionUser = {
   avatarUrl: string;
 };
 
-/** Ambil user dari cookie sesi pada Request (route handler). */
-export async function getSessionUser(req: Request): Promise<SessionUser | null> {
+/** Ambil token sesi dari cookie ATAU header Authorization (cadangan bila cookie diblokir iframe). */
+function extractSessionToken(req: Request): string | null {
   const cookieHeader = req.headers.get("cookie") ?? "";
   const match = cookieHeader
     .split(";")
     .map((c) => c.trim())
     .find((c) => c.startsWith(`${SESSION_COOKIE}=`));
-  const token = match ? decodeURIComponent(match.slice(SESSION_COOKIE.length + 1)) : null;
+  if (match) {
+    return decodeURIComponent(match.slice(SESSION_COOKIE.length + 1));
+  }
+  const auth = req.headers.get("authorization");
+  if (auth?.toLowerCase().startsWith("bearer ")) {
+    return auth.slice(7).trim() || null;
+  }
+  return null;
+}
+
+export async function getSessionUser(req: Request): Promise<SessionUser | null> {
+  const token = extractSessionToken(req);
   const userId = verifySessionToken(token);
   if (!userId) return null;
   const user = await db.user.findUnique({ where: { id: userId } });
@@ -73,11 +84,19 @@ export async function getSessionUser(req: Request): Promise<SessionUser | null> 
   };
 }
 
-export function sessionCookieOptions() {
+/**
+ * Opsi cookie sesi yang kompatibel dengan pratinjau dalam iframe.
+ * - HTTPS (termasuk di balik proxy, deteksi via x-forwarded-proto): SameSite=None + Secure
+ *   agar cookie tetap terkirim saat platform dibuka di iframe lintas-situs.
+ * - HTTP lokal: SameSite=Lax (SameSite=None tanpa Secure akan ditolak browser).
+ */
+export function sessionCookieOptions(req?: Request) {
+  const proto = req?.headers.get("x-forwarded-proto") ?? "";
+  const isHttps = proto.split(",")[0].trim() === "https";
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
+    secure: isHttps,
     maxAge: SESSION_MAX_AGE,
     path: "/",
   };
