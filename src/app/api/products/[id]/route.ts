@@ -78,6 +78,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.unit !== undefined) patch.unit = String(body.unit).trim().slice(0, 30) || "kg";
     if (body.description !== undefined) patch.description = String(body.description).slice(0, 600);
     if (body.imageUrl !== undefined) patch.imageUrl = String(body.imageUrl);
+    if (body.gallery !== undefined) {
+      const gal = Array.isArray(body.gallery) ? body.gallery.map(String).filter(Boolean).slice(0, 4) : [];
+      patch.gallery = JSON.stringify(gal);
+    }
     if (body.location !== undefined) {
       const location = String(body.location).trim();
       if (!location) return NextResponse.json({ error: "Lokasi tidak boleh kosong" }, { status: 400 });

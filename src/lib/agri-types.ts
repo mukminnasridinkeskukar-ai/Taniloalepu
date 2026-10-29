@@ -231,6 +231,8 @@ export const CROP_CATEGORIES: Record<string, string> = {
   semua: "Semua",
   "padi-padian": "Padi-padian",
   sayuran: "Sayuran",
+  buah: "Buah",
+  "bumbu-dapur": "Bumbu Dapur",
   hortikultura: "Hortikultura",
   umbi: "Umbi",
   palawija: "Palawija",

@@ -17,9 +17,14 @@ export const LAND_PRESET_IMAGES: string[] = [
   A("hero_sawah", 0), A("hero_sawah", 1), A("hero_sawah", 2), A("hero_sawah", 3), A("hero_sawah", 4), A("crop_padi", 2),
 ];
 
+// Pilihan gambar produk hasil panen — 24 foto: sayur, buah, beras, bumbu, hasil ternak & olahan
 export const PRODUCT_PRESET_IMAGES: string[] = [
-  A("prod_sayur", 0), A("prod_beras", 0), A("prod_tomat", 1), A("prod_cabai", 2), A("prod_jagung", 3),
-  A("prod_kangkung", 2), A("prod_pisang", 1), A("prod_mangga", 2), A("prod_telur", 2), A("prod_madu", 1),
+  A("prod_sayur", 0), A("prod_sayurmix", 0), A("prod_sayurmix", 1), A("prod_sayurmix", 2),
+  A("prod_beras", 0), A("prod_beras", 2), A("prod_tomat", 1), A("prod_cabai", 2),
+  A("prod_cabai", 1), A("prod_jagung", 3), A("prod_jagung", 0), A("prod_kangkung", 0),
+  A("prod_pisang", 1), A("prod_pisang", 2), A("prod_mangga", 2), A("prod_buahmix", 0),
+  A("prod_buahmix", 1), A("prod_ubijalar", 0), A("prod_bumbu", 0), A("prod_bumbu", 1),
+  A("prod_bumbu", 3), A("prod_madu", 1), A("prod_telur", 2), A("prod_telur", 0),
 ];
 
 export type PrepStep = {

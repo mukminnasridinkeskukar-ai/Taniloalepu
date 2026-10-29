@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, Loader2, ShoppingCart, Star, MapPin, Plus, Minus, Trash2, Store,
   PackageCheck, Truck, Leaf, X, Sprout, LogIn, Pencil, Landmark, Banknote,
-  Navigation, MessageCircle, Upload, BadgeCheck,
+  Navigation, MessageCircle, Upload, BadgeCheck, ImagePlus,
 } from "lucide-react";
 import type { Product, AuthUser } from "@/lib/agri-types";
 import {
@@ -75,8 +75,13 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
   const [sellOpen, setSellOpen] = useState(false);
   const [sellForm, setSellForm] = useState({ ...EMPTY_SELL });
   const [selling, setSelling] = useState(false);
+  // Foto tambahan produk (galeri) & unggahan foto sendiri
+  const [sellGallery, setSellGallery] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const proofRef = useRef<HTMLInputElement>(null);
+  const mainPhotoRef = useRef<HTMLInputElement>(null);
+  const galleryPhotoRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async (query: string, cat: string, sortKey: string) => {
     setLoading(true);
@@ -243,9 +248,43 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
     }
   }
 
+  /** Unggah foto utama pilihan petani → dikompres menjadi data URL. */
+  async function handleUploadMain(file?: File | null) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await fileToDataUrl(file, { maxSide: 1000, quality: 0.75 });
+      setSellForm((f) => ({ ...f, imageUrl: dataUrl }));
+      toast({ title: "Foto utama diunggah", description: "Foto pilihan Anda kini menjadi foto utama produk." });
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal memuat gambar", variant: "destructive" });
+    } finally {
+      setUploadingPhoto(false);
+      if (mainPhotoRef.current) mainPhotoRef.current.value = "";
+    }
+  }
+
+  /** Tambah foto tambahan (galeri produk, maks 4). */
+  async function handleUploadGallery(file?: File | null) {
+    if (!file) return;
+    if (sellGallery.length >= 4) {
+      toast({ title: "Foto tambahan sudah maksimal 4", variant: "destructive" });
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file, { maxSide: 900, quality: 0.72 });
+      setSellGallery((g) => [...g, dataUrl]);
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal memuat gambar", variant: "destructive" });
+    } finally {
+      if (galleryPhotoRef.current) galleryPhotoRef.current.value = "";
+    }
+  }
+
   function openSell() {
     setEditTarget(null);
     setSellForm({ ...EMPTY_SELL });
+    setSellGallery([]);
     setSellOpen(true);
   }
 
@@ -262,6 +301,7 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
       imageUrl: p.imageUrl,
       isOrganic: p.isOrganic,
     });
+    setSellGallery(parseJsonArr<string>(p.gallery).slice(0, 4));
     setSellOpen(true);
   }
 
@@ -281,7 +321,7 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
         ...sellForm,
         price: Number(sellForm.price),
         stock: Math.max(0, Math.floor(Number(sellForm.stock || (editTarget ? 0 : 1)))),
-        gallery: [],
+        gallery: sellGallery.slice(0, 4),
       };
       const res = editTarget
         ? await fetch(`/api/products/${editTarget.id}`, {
@@ -303,6 +343,7 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
       setSellOpen(false);
       setEditTarget(null);
       setSellForm({ ...EMPTY_SELL });
+      setSellGallery([]);
       void fetchProducts(q, category, sort);
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : "Gagal menyimpan produk", variant: "destructive" });
@@ -909,8 +950,25 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
                 onChange={(e) => setSellForm({ ...sellForm, description: e.target.value })} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Pilih foto produk</Label>
-              <div className="grid grid-cols-5 gap-2">
+              <Label>Pilih foto produk ({PRODUCT_PRESET_IMAGES.length} pilihan)</Label>
+              <div className="grid grid-cols-5 gap-2 sm:grid-cols-6">
+                {sellForm.imageUrl && !PRODUCT_PRESET_IMAGES.includes(sellForm.imageUrl) && (
+                  <button
+                    type="button"
+                    className="relative aspect-square overflow-hidden rounded-lg border-2 border-primary ring-2 ring-ring/40"
+                    aria-label="Foto unggahan Anda terpilih"
+                  >
+                    <img src={sellForm.imageUrl} alt="Foto unggahan Anda" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSellForm({ ...sellForm, imageUrl: PRODUCT_PRESET_IMAGES[0] }); }}
+                      className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-destructive"
+                      aria-label="Hapus foto unggahan"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </button>
+                )}
                 {PRODUCT_PRESET_IMAGES.map((url) => (
                   <button
                     key={url}
@@ -924,7 +982,72 @@ export function MarketView({ user, onNavigate }: { user: AuthUser | null; onNavi
                     <img src={url} alt="Opsi foto produk" className="h-full w-full object-cover" loading="lazy" />
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => mainPhotoRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+                  aria-label="Unggah foto pilihan sendiri"
+                >
+                  {uploadingPhoto ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <ImagePlus className="h-5 w-5" aria-hidden="true" />
+                      <span className="px-1 text-center text-[10px] font-medium leading-tight">Unggah foto sendiri</span>
+                    </>
+                  )}
+                </button>
               </div>
+              <input
+                ref={mainPhotoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleUploadMain(e.target.files?.[0])}
+              />
+              <p className="text-xs text-muted-foreground">
+                Tidak cocok dengan pilihan di atas? Klik kotak “Unggah foto sendiri” dan ambil foto hasil panen Anda.
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Foto tambahan (opsional, maks 4)</Label>
+              <div className="flex flex-wrap gap-2">
+                {sellGallery.map((g, i) => (
+                  <div key={i} className="relative h-16 w-16 overflow-hidden rounded-lg border border-border">
+                    <img src={g} alt={`Foto tambahan ${i + 1}`} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setSellGallery((arr) => arr.filter((_, j) => j !== i))}
+                      className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-destructive"
+                      aria-label={`Hapus foto tambahan ${i + 1}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {sellGallery.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => galleryPhotoRef.current?.click()}
+                    className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                    aria-label="Tambah foto tambahan"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <span className="text-[10px] font-medium">Tambah</span>
+                  </button>
+                )}
+              </div>
+              <input
+                ref={galleryPhotoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleUploadGallery(e.target.files?.[0])}
+              />
+              <p className="text-xs text-muted-foreground">
+                Foto tambahan tampil di halaman detail produk — misalnya foto tanaman, kemasan, atau lokasi panen Anda.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
