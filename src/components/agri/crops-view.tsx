@@ -60,7 +60,7 @@ export function CropsView({ onAskAi }: { onAskAi: (question: string) => void }) 
         <Badge variant="secondary" className="mb-2">Ensiklopedia Tanaman</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Kenali & Rawat Tanaman</h1>
         <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
-          Panduan budidaya lengkap 28+ tanaman — sayuran, buah, bumbu dapur, hingga padi-padian:
+          Panduan budidaya lengkap 54 tanaman — sayuran, buah tropis, bumbu dapur, rempah, hingga padi-padian:
           cara menanam, jadwal perawatan, hingga solusi hama & penyakit. Bingung? Tanya Pak Tani Digital kapan saja.
         </p>
       </div>
@@ -72,7 +72,7 @@ export function CropsView({ onAskAi }: { onAskAi: (question: string) => void }) 
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Cari tanaman… (cth: padi, jahe, kemangi, terung)"
+            placeholder="Cari tanaman… (cth: manggis, katuk, lada, nanas)"
             className="h-12 pl-10"
             aria-label="Cari tanaman"
           />

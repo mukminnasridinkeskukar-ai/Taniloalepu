@@ -26,7 +26,7 @@ const FEATURES: {
   },
   {
     key: "tanaman", icon: Leaf, title: "Kenali & Rawat Tanaman",
-    desc: "Ensiklopedia 8 komoditas utama dengan cara menanam, perawatan, dan solusi hama-penyakit. Plus asisten AI tanya-jawab.",
+    desc: "Ensiklopedia 54 komoditas — sayur, buah, bumbu dapur & rempah — lengkap cara menanam, perawatan, dan solusi hama-penyakit. Plus asisten AI tanya-jawab.",
     image: HERO_IMAGES.farmer2, tag: "Edukasi",
   },
   {
