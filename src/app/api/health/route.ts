@@ -38,7 +38,7 @@ export async function GET() {
         produk,
         catatan:
           tanaman === 0 || pengguna === 0
-            ? "Tabel kosong — buka SQL Editor layanan basis data Anda lalu jalankan supabase/setup.sql untuk membuat tabel & data awal (akun demo, tanaman, produk)."
+            ? "Tabel kosong — buka SQL Editor layanan basis data Anda lalu jalankan supabase/setup.sql untuk membuat tabel, akun pengelola, dan katalog tanaman."
             : "Data awal tersedia. Platform siap digunakan.",
       },
     };

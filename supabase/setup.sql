@@ -4,8 +4,9 @@
 -- Cara pakai:
 --   1. Buka panel layanan basis data Anda → menu "SQL Editor"
 --   2. Tempel SELURUH isi berkas ini, lalu klik "Run"
---   3. Selesai! Tabel + kebijakan akses + data awal (akun demo,
---      katalog tanaman, produk pasar) langsung terisi.
+--   3. Selesai! Tabel + kebijakan akses + akun pengelola &
+--      katalog tanaman langsung terisi. Pasar mulai kosong — petani
+--      memasukkan hasil panennya sendiri lewat aplikasi.
 --
 -- Berkas ini AMAN dijalankan berulang (idempoten): data lama Anda
 -- tidak akan ditimpa atau dihapus.
@@ -224,16 +225,13 @@ create trigger trg_lands_touch
 -- DATA AWAL (idempoten — tidak menimpa data yang sudah ada)
 -- ================================================================
 
--- ===== AKUN DEMO =====
--- superadmin / super123      → Admin Desa (akses penuh)
--- operator   / operator123   → Operator Desa (setujui akun, lihat kredensial petani)
--- petani01   / petani123     → Petani aktif (contoh data)
--- petani02   / petani456     → Petani menunggu persetujuan
+-- ===== AKUN PENGELOLA =====
+-- superadmin / super123      -> Admin Desa (akses penuh)
+-- operator   / operator123   -> Operator Desa (setujui akun, bantu pemulihan)
+-- Petani mendaftar sendiri lewat menu Daftar; tidak ada akun contoh.
 insert into public.accounts (username, password, name, role, status, phone, address, approved_at) values
-  ('superadmin', 'super123',    'Admin Desa Loa Lepu',   'superadmin', 'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
-  ('operator',   'operator123', 'Operator Desa Loa Lepu','operator',   'aktif',   '',              'Desa Loa Lepu, Tenggarong Seberang', now()),
-  ('petani01',   'petani123',   'Bpk. Sutrisno',         'petani',     'aktif',   '0812-3456-7890','Dusun Loa Lepu Ulu',                 now()),
-  ('petani02',   'petani456',   'Ibu Mariati',           'petani',     'menunggu','0853-9876-5432','Dusun Loa Lepu Ilir',                null)
+  ('superadmin', 'super123',    'Admin Desa Loa Lepu',   'superadmin', 'aktif', '', 'Desa Loa Lepu, Tenggarong Seberang', now()),
+  ('operator',   'operator123', 'Operator Desa Loa Lepu','operator',   'aktif', '', 'Desa Loa Lepu, Tenggarong Seberang', now())
 on conflict (username) do nothing;
 
 -- ===== KATALOG TANAMAN =====
@@ -268,75 +266,6 @@ on conflict (slug) do nothing;
 insert into public.crops (slug, name, latin_name, category, difficulty, harvest_days, water_need, sun_need, season, description, image_url, gallery, planting_steps, care_tips, diseases, price_range)
 values ('kedelai', 'Kedelai', 'Glycine max', 'palawija', 'sedang', 85, 'sedang', 'terang penuh', 'Musim kemarau setelah padi (Maret–Juli)', 'Kedelai adalah palawija strategis sebagai bahan baku tahu–tempe yang permintaannya sangat besar. Tanaman ini ideal untuk pola tanam padi–padi–kedelai karena mampu memperbaiki kesuburan tanah melalui pengikatan nitrogen. Varietas unggul: Anjasmoro, Dena 1, dan Grobogan yang berbiji besar.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/36cccf361def.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/3933bd229c7e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg"]', '["Olah tanah setelah panen padi — cukup bajak ringan dan ratakan, buat drainase.","Inokulasi benih dengan rizobium untuk meningkatkan pembentukan bintil akar.","Tanam benih 2–3 per lubang kedalaman 3–4 cm, jarak 40×10 cm.","Panen saat 90% polong menguning-kering dan daun gugur (usia 80–90 hari)."]', '["Penyiangan pada usia 2 dan 4 minggu setelah tanam.","Pemupukan fosfor (SP-36) saja biasanya cukup karena rizobium menyuplai nitrogen.","Awas kutu daun dan penghisap polong saat fase polong muda.","Keringkan hasil hingga kadar air 12–13% sebelum disimpan/dijual agar awet."]', '[{"name":"Kutu Daun (Aphids)","symptom":"Koloni serangga kecil hitam/hijau di pucuk muda.","treatment":"Semprotkan larutan sabun kalium atau insektisida hayati."},{"name":"Karat Daun","symptom":"Bintik karat kemerahan di kedua permukaan daun.","treatment":"Fungisida dan hindari tanam terlalu rapat."},{"name":"Ulat Grayak","symptom":"Larva bergerombol memakan daun hingga tinggal tulang saja.","treatment":"Rakit telurnya, semprotkan Bt atau virus NPV."}]', 'Rp 9.000 – 12.000 / kg')
 on conflict (slug) do nothing;
-
--- ===== PRODUK PASAR (hanya diisi bila tabel masih kosong) =====
-insert into public.products (name, category, price, unit, stock, description, image_url, gallery, farmer_name, location, rating, sold, is_organic)
-select * from (values
-  ('Beras Merah Organik 5 kg', 'beras-palawija', 85000, 'karung 5 kg', 42, 'Beras merah organik hasil budidaya tanpa pupuk kimia, kaya serat dan rendah indeks glikemik. Digiling fresh setiap minggu sehingga aroma dan gizinya terjaga. Cocok untuk pola hidup sehat keluarga.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/66d16b8a0ab4.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e85f546881ed.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/eeaf03cc4045.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/cbd8fa8b4aa2.jpg"]', 'Gapoktan Tani Loa Lepu', 'Desa Loa Lepu, Tenggarong Seberang', 4.9, 156, true),
-  ('Beras Putih Premium 10 kg', 'beras-palawija', 132000, 'karung 10 kg', 68, 'Beras putih pulen varietas unggul hasil panen terbaru. Bersih, bebas kutu, dan digiling dengan mesin higienis. Setiap pembelian mendukung langsung petani mitra desa.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/eeaf03cc4045.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/fee536709cc8.webp","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/04c0b9d8c114.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/7420d763deba.jpeg"]', 'Gapoktan Harapan Jaya', 'Desa Loa Kulu, Tenggarong Seberang', 4.8, 312, false),
-  ('Tomat Segar Panen Harian', 'sayuran', 12000, 'kg', 85, 'Tomat merah segar dipetik pagi hari dan dikirim di hari yang sama. Cocok untuk konsumsi rumah tangga, warung makan, maupun jumlah besar (grosir). Ada garansi ganti untuk buah rusak.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bedf3788be6e.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/96111896d258.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/424394ac2caf.jpg"]', 'Bpk. Sutrisno', 'Desa Buana Pertiwi, Tenggarong Seberang', 4.7, 208, false),
-  ('Cabai Merah Keriting', 'sayuran', 45000, 'kg', 30, 'Cabai keriting kualitas ekspor dengan tingkat kepedasan mantap. Dipanen pada kematangan sempurna sehingga warna merah cerah dan tahan simpan 4–5 hari dalam kondisi normal.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/416a5f20be86.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/58d93424efc4.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/34ce79d02bc2.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/a5c14d7c3068.jpg"]', 'Bpk. Hardono', 'Desa Jambangan, Tenggarong Seberang', 4.8, 97, false),
-  ('Jagung Manis Pipil', 'beras-palawija', 9000, 'kg', 120, 'Jagung manis varietas bonanza, dipipil segar dan bersih siap dimasak atau diolah jagung susu. Manis, juicy, dan bebas obat cuci kimia.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/887e35135247.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/15438e5c3a47.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/9ec90db270a9.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/bddc7b142463.jpg"]', 'Kelompok Tani Sido Makmur', 'Desa Handil Bhakti, Tenggarong Seberang', 4.6, 141, false),
-  ('Kangkung Hidroponik', 'sayuran', 5000, 'ikat', 200, 'Kangkung hidroponik ditanam tanpa tanah dan tanpa pestisida — daun lembut, segar lebih lama, dan aman langsung dicuci untuk konsumsi. Dipanen pagi, dikirim siang.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'GreenFarm Hidroponik', 'Desa Loa Ipuh, Tenggarong Seberang', 4.9, 425, true),
-  ('Paket Sayur Segar Hemat', 'sayuran', 60000, 'paket', 45, 'Isi 7–8 jenis sayuran harian (bayam, kangkung, wortel, tomat, cabai, bawang, kol, sawi) cukup untuk keluarga selama 3–4 hari. Isi bisa menyesuaikan panen terbaik hari itu.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'Kelompok Wanita Tani Ceria', 'Desa Kedasih, Tenggarong Seberang', 4.9, 289, true),
-  ('Pisang Cavendish Premium', 'buah', 22000, 'sisir ±1 kg', 60, 'Pisang cavendish grade ekspor: besar, manis, dan matang merata. Dipetik hijau lalu diproses perawatan pascapanen agar matang alami tanpa bahan karbit.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b0164709bffa.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/6e1f4d1de1d0.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0bfa78fac27a.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/b0164709bffa.jpg"]', 'Kelompok Buah Sejahtera', 'Desa Ganesho, Tenggarong Seberang', 4.8, 176, false),
-  ('Mangga Harum Manis', 'buah', 28000, 'kg', 38, 'Mangga harum manis petik matang dari kebun petani mitra di Sebulu — aromanya kuat, dagingnya tebal dan bebas serat. Dipanen dengan rantai dingin sederhana agar kualitas terjaga sampai rumah Anda.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0f361e6c51ed.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/70dadea900b9.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/e4a06e4795eb.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0f361e6c51ed.jpg"]', 'Bpk. Karim', 'Desa Sebulu, Kutai Kartanegara', 4.7, 112, false),
-  ('Telur Ayam Kampung', 'protein', 32000, 'kg', 55, 'Telur ayam kampung dari ayam umbaran bebas pakan pabrikan. Kuning telur pekat oranye, cocok untuk anak-anak dan ibu hamil. Dikemas dengan kardus anti benturan.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/112eb8e5928f.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ce4fbe0142b9.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e5d152abe20.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/13108a2087a5.png"]', 'Peternakan Makmur Sejahtera', 'Desa Muara Jawa, Kutai Kartanegara', 4.8, 233, true),
-  ('Madu Hutan Murni 350 ml', 'olahan', 95000, 'botol', 25, 'Madu hutan murni hasil panen lestari dari pedalaman Mahakam, tanpa campuran gula. Diambil dari lebah hutan dengan kearifan lokal, kaya enzim alami dan aroma bunga hutan khas.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/02fbad5329de.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/4d152dd15e97.jpeg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/02fbad5329de.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/200c121de414.jpg"]', 'Kelompok Madu Lestari', 'Desa Muara Muntai, Kutai Kartanegara', 5, 64, true),
-  ('Bawang Merah Kualitas Pasar', 'sayuran', 30000, 'kg', 70, 'Bawang merah kering berkualitas dari kebun petani mitra di Kota Bangun, umbi padat dan tidak bertunas. Disortir ketat — 1 kg dijamin bersih tanpa umbi busuk.', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/ab10c8766b9d.jpg', '["https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/475261a01b5c.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/8cdfb5b920eb.jpg","https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/12fd6f1fbdc3.jpg"]', 'Kelompok Tani Bawang Sejahtera', 'Desa Kota Bangun, Kutai Kartanegara', 4.6, 198, false)
-) as baru(name, category, price, unit, stock, description, image_url, gallery, farmer_name, location, rating, sold, is_organic)
-where not exists (select 1 from public.products);
-
--- ===== LAHAN CONTOH (hanya bila tabel masih kosong) =====
-insert into public.lands (name, location, area, area_unit, soil_type, status, planned_crop, image_url, notes, completed_steps)
-select * from (values
-  ('Sawah Utama', 'Desa Loa Lepu, Tenggarong Seberang', 2500, 'm2', 'alluvial', 'tanam', 'Padi (Ciherang)', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/d4f9727d1b0b.jpg', 'Irigasi teknis dari bendung, panen raya diperkirakan awal Maret.', '["lahan","olahan","benih","tanam"]'),
-  ('Kebun Sayur Rumah', 'Desa Loa Lepu, Tenggarong Seberang', 800, 'm2', 'andosol', 'perawatan', 'Cabai Merah (L3 F1)', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/035efeb31b24.jpeg', 'Mulsa plastik terpasang, pemupukan susulan tiap 10 hari.', '["lahan","olahan","benih","tanam","perawatan"]'),
-  ('Ladang Persiapan Baru', 'Desa Loa Duri Ilir, Tenggarong Seberang', 1500, 'm2', 'kapur (litosol)', 'persiapan', 'Jagung Manis', 'https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/0e9efd33f81a.jpg', 'Menunggu traktor untuk bajak perdana, jadwal tanam awal bulan depan.', '["lahan"]')
-) as baru(name, location, area, area_unit, soil_type, status, planned_crop, image_url, notes, completed_steps)
-where not exists (select 1 from public.lands);
-
--- Catat aktivitas awal untuk setiap lahan yang belum punya catatan
-insert into public.activities (land_id, title, note)
-select l.id, 'Lahan didaftarkan ke platform', 'Lahan siap dikelola bersama Tani Loa Lepu.'
-from public.lands l
-where not exists (
-  select 1 from public.activities a where a.land_id = l.id and a.title = 'Lahan didaftarkan ke platform'
-);
-
--- ===== DATA CONTOH ALAMAT / GPS / REKENING PETANI (bila belum terisi) =====
-update public.accounts
-set address_full = 'Dusun Loa Lepu Ulu, RT 03 / RW 02',
-    village = 'Desa Loa Lepu',
-    district = 'Kecamatan Tenggarong Seberang',
-    regency = 'Kabupaten Kutai Kartanegara',
-    province = 'Kalimantan Timur',
-    latitude = -0.402834, longitude = 117.088412,
-    bank_name = 'BRI',
-    bank_account_number = '1234-01-234567-53-6',
-    bank_account_name = 'Sutrisno'
-where username = 'petani01' and coalesce(bank_name, '') = '';
-
-update public.accounts
-set address_full = 'Dusun Loa Lepu Ilir, RT 01 / RW 01',
-    village = 'Desa Loa Lepu',
-    district = 'Kecamatan Tenggarong Seberang',
-    regency = 'Kabupaten Kutai Kartanegara',
-    province = 'Kalimantan Timur',
-    latitude = -0.399210, longitude = 117.079350,
-    bank_name = 'Bank Kaltimtara',
-    bank_account_number = '010-02-01234-56-7',
-    bank_account_name = 'Mariati'
-where username = 'petani02' and coalesce(bank_name, '') = '';
-
--- ===== KEPEMILIKAN DATA DEMO (bila belum ada pemiliknya) =====
-update public.lands
-set owner_id = (select id from public.accounts where username = 'petani01')
-where owner_id is null;
-
-update public.products
-set owner_id = (select id from public.accounts where username = 'petani01')
-where owner_id is null;
 
 -- ===== SELESAI =====
 select

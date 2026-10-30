@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  MapPinned, Tractor, Leaf, Store, ArrowRight, Users, Globe2, Star, ShoppingCart, ShieldCheck,
+  MapPinned, Tractor, Leaf, Store, ArrowRight, Users, ShieldCheck,
 } from "lucide-react";
 import { HERO_IMAGES } from "@/lib/agri-content";
 import type { AuthUser } from "@/lib/agri-types";
@@ -37,28 +37,10 @@ const FEATURES: {
 ];
 
 const STATS = [
-  { icon: Users, value: "320+", label: "Petani tergabung" },
-  { icon: Globe2, value: "24", label: "Desa mitra di Kutai Kartanegara" },
-  { icon: ShoppingCart, value: "12 ton", label: "Hasil panen terjual" },
-  { icon: Star, value: "4,9/5", label: "Rating kepuasan" },
-];
-
-const TESTIMONI = [
-  {
-    name: "Bpk. Sutrisno", role: "Petani Tomat, Desa Loa Duri Ilir",
-    quote: "Dulu hasil panen harus lewat tengkulak, harganya kecil sekali. Sekarang lewat Pasar Tani, tomat saya langsung dibeli masyarakat dengan harga pas.",
-    initial: "S",
-  },
-  {
-    name: "Bu Warti", role: "Petani Sayur, Desa Buana Pertiwi",
-    quote: "Fitur Kenali Tanaman sangat membantu. Waktu daun cabai saya menguning, saya tanya Pak Tani Digital dan langsung ketahuan solusinya sebelum merembet ke tanaman lain.",
-    initial: "W",
-  },
-  {
-    name: "Bpk. Hardono", role: "Petani Cabai, Desa Jambangan",
-    quote: "Catat aktivitas lahan di HP itu praktis. Saya tidak lupa jadwal pupuk dan siram, panen jadi lebih teratur. Laporan panen juga rapi saat ada pembeli datang.",
-    initial: "H",
-  },
+  { icon: Leaf, value: "54", label: "Komoditas dalam ensiklopedia tanaman" },
+  { icon: Tractor, value: "6", label: "Langkah panduan penyiapan lahan" },
+  { icon: Users, value: "3", label: "Peran: petani, operator & admin desa" },
+  { icon: ShieldCheck, value: "Gratis", label: "Tanpa biaya untuk petani desa" },
 ];
 
 export function HomeView({ onNavigate, user }: { onNavigate: (v: ViewKey) => void; user: AuthUser | null }) {
@@ -300,41 +282,6 @@ export function HomeView({ onNavigate, user }: { onNavigate: (v: ViewKey) => voi
         </div>
       </section>
 
-      {/* ===== TESTIMONI ===== */}
-      <section className="bg-secondary/60 py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <Badge variant="secondary" className="mb-3">Cerita Petani</Badge>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Mereka sudah lebih dulu merasakan manfaatnya
-            </h2>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {TESTIMONI.map((t) => (
-              <Card key={t.name} className="flex flex-col p-6">
-                <div className="flex gap-1 text-amber-500" aria-label="5 bintang">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-current" aria-hidden="true" />
-                  ))}
-                </div>
-                <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-foreground/90">
-                  “{t.quote}”
-                </blockquote>
-                <div className="mt-5 flex items-center gap-3 border-t border-border/60 pt-4">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 font-bold text-primary">
-                    {t.initial}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.role}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ===== CTA ===== */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20">
         <div className="relative overflow-hidden rounded-3xl">
@@ -350,8 +297,9 @@ export function HomeView({ onNavigate, user }: { onNavigate: (v: ViewKey) => voi
               Siap membawa pertanian Anda ke level berikutnya?
             </h2>
             <p className="max-w-xl text-emerald-50/90">
-              Bergabung bersama ratusan petani di Kutai Kartanegara yang sudah mengelola lahan dan
-              menjual hasil panen dengan Tani Loa Lepu. Gratis, langsung, tanpa syarat rumit.
+              Kelola lahan, rawat tanaman, dan jual hasil panen dengan panduan mudah —
+              dirancang untuk petani Desa Loa Lepu dan sekitarnya. Gratis, langsung,
+              tanpa syarat rumit.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Button size="lg" onClick={() => onNavigate("lahan")} className="bg-emerald-500 text-white hover:bg-emerald-400">

@@ -55,14 +55,19 @@ Platform memiliki tiga peran pengguna dengan hak akses berbeda:
 operator menyetujui dari Panel Operator → petani dapat masuk dan mulai menginput data.
 Input data lahan/produk hanya bisa dilakukan setelah masuk dengan akun aktif.
 
-### Akun Demo
+### Akun Pengelola Bawaan
 
 | Peran | Nama Pengguna | Kata Sandi |
 |-------|---------------|------------|
 | Superadmin | `superadmin` | `super123` |
 | Operator | `operator` | `operator123` |
-| Petani (aktif) | `petani01` | `petani123` |
-| Petani (menunggu persetujuan) | `petani02` | `petani456` |
+
+Tidak ada akun petani contoh — petani mendaftar sendiri lewat menu **Daftar**,
+lalu disetujui operator.
+
+> ⚠️ **Wajib setelah instalasi:** segera ganti kata sandi kedua akun bawaan di atas
+> lewat Panel Admin Desa (menu Akun → Ubah Sandi), karena kata sandi bawaan
+> tertulis di berkas ini dan di `supabase/setup.sql`.
 
 > Catatan keamanan: kata sandi disimpan dalam bentuk yang dapat dilihat operator
 > sesuai kebutuhan pemulihan akun tingkat desa. Untuk penerapan skala besar,
@@ -97,7 +102,8 @@ npm run dev          # atau: bun run dev
 ```
 
 Buka `http://localhost:3000` di peramban. Seluruh data diambil dari basis data
-awan yang sama dengan deployment produksi — akun demo & data contoh sudah tersedia.
+awan yang sama dengan deployment produksi — katalog tanaman sudah tersedia,
+dan Pasar Tani mulai kosong untuk diisi hasil panen asli petani.
 
 ## Build Produksi
 
@@ -138,9 +144,10 @@ supabase/
 > `setup.sql` terbaru. Skrip ini *idempoten* — aman dijalankan berulang, data lama Anda
 > tidak berubah; kolom-kolom baru (alamat & GPS, rekening bank, metode & bukti
 > pembayaran) akan ditambahkan otomatis.
-3. Selesai. Hasilnya: 6 tabel + kebijakan akses + data awal (4 akun demo,
-   8 tanaman, 12 produk, 3 lahan contoh). Skrip ini aman dijalankan ulang —
-   data yang sudah ada tidak akan ditimpa.
+3. Selesai. Hasilnya: 6 tabel + kebijakan akses + akun pengelola & katalog
+   tanaman (54 komoditas). Skrip ini aman dijalankan ulang — data yang sudah
+   ada tidak akan ditimpa. Pasar Tani mulai kosong; petani memasukkan
+   produknya sendiri lewat aplikasi.
 
 > ⚠️ **Penyebab paling umum gagal masuk (login) di deployment:** langkah 1 dilewati,
 > atau tabel dibuat dengan skema versi lama yang mengunci tabel `accounts`.
@@ -165,7 +172,7 @@ https://alamat-situs-anda/api/health
 Endpoint ini menampilkan status basis data **tanpa mengekspos rahasia**:
 
 - `"status": "tersambung"` + `pengguna` lebih dari 0 → semuanya siap; silakan masuk
-  dengan akun demo.
+  dengan akun pengelola (ganti kata sandi bawaan setelah masuk).
 - `pengguna: 0` meski `tanaman`/`produk` terisi → kebijakan akses lama masih aktif;
   jalankan ulang `supabase/setup.sql` (Langkah 1).
 - `"status": "gagal"` → ikuti kolom `saran` (pesan berbahasa Indonesia).

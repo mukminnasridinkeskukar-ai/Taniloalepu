@@ -508,7 +508,7 @@ export function ProfileView({ user, onUserUpdated }: { user: AuthUser; onUserUpd
                 <Label htmlFor="pf-bank-name">Atas Nama</Label>
                 <Input
                   id="pf-bank-name"
-                  placeholder="cth. Sutrisno"
+                  placeholder="cth. Budi Santoso"
                   value={bank.bankAccountName}
                   onChange={(e) => setBank((p) => ({ ...p, bankAccountName: e.target.value }))}
                 />

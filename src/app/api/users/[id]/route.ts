@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
       const updated = await store.users.update(id, {
         status,
-        approvedAt: status === "aktif" ? new Date() : target.approvedAt,
+        approvedAt: status === "aktif" ? new Date().toISOString() : target.approvedAt,
       });
       return NextResponse.json({ ok: true, status: updated?.status ?? status });
     }

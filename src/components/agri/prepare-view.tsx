@@ -67,8 +67,8 @@ export function PrepareView() {
             Menyiapkan Lahan dengan Benar = Separuh Panen Sukses
           </h1>
           <p className="mt-3 max-w-2xl text-emerald-50/90">
-            Ikuti enam langkah persiapan yang telah teruji oleh ribuan petani. Setiap langkah
-            dilengkapi foto ilustrasi, estimasi waktu, dan tips praktis hemat biaya.
+            Ikuti enam langkah persiapan lahan yang disusun runtut dari awal sampai siap tanam.
+            Setiap langkah dilengkapi foto ilustrasi, estimasi waktu, dan tips praktis hemat biaya.
           </p>
         </div>
       </div>

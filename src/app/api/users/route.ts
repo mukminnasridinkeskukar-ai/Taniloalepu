@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       status,
       phone: String(body.phone ?? "").trim().slice(0, 30),
       address: String(body.address ?? "").trim().slice(0, 200),
-      approvedAt: status === "aktif" ? new Date() : null,
+      approvedAt: status === "aktif" ? new Date().toISOString() : null,
     });
     return NextResponse.json({ ok: true, id: user.id }, { status: 201 });
   } catch (err) {
